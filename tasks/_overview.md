@@ -42,9 +42,9 @@ Example: `P3-01_sidebar.md` = Phase 3, first task, sidebar component.
 
 | Task | File | Branch | Status | Depends On |
 |------|------|--------|--------|------------|
-| Project scaffolding | `P1-01_scaffolding.md` | `main` | [ ] | — |
-| Firebase setup | `P1-02_firebase-setup.md` | `main` | [ ] | P1-01 |
-| Sentry setup | `P1-03_sentry-setup.md` | `main` | [ ] | P1-01 |
+| Project scaffolding | `P1-01_scaffolding.md` | `main` | [x] | — |
+| Firebase setup | `P1-02_firebase-setup.md` | `main` | [x] | P1-01 |
+| Sentry setup | `P1-03_sentry-setup.md` | `main` | [x] | P1-01 |
 
 ## Phase 2 — Auth & Data Layer (Sequential)
 
