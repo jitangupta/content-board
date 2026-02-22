@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "filepath=$(jq -r '.tool_response.filePath // .tool_input.file_path' 2>/dev/null) && echo \"$filepath\" | grep -qE '\\.(ts|tsx)$' && npx prettier --write \"$filepath\" 2>/dev/null; true",
+            "timeout": 15,
+            "statusMessage": "Auto-formatting..."
+          }
+        ]
+      }
+    ]
+  }
+}

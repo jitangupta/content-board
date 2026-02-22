@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(firebase:*)",
+      "Bash(cd /c/Users/jitan/Journal/claude/code-youtube/content-board && npm test 2>&1)",
+      "Bash(cd /c/Users/jitan/Journal/claude/code-youtube/content-board && npx vitest run src/features/production/ src/components/DetailPanel/tabs/ProductionTab.test.tsx src/components/DetailPanel/DetailPanel.test.tsx 2>&1)",
+      "Bash(cd /c/Users/jitan/Journal/claude/code-youtube/content-board && npx vitest run 2>&1)",
+      "Bash(cd:*)"
+    ]
+  }
+}
