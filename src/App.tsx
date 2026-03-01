@@ -1,6 +1,7 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { SentryErrorBoundary } from '@/services/sentry';
 import { AuthProvider } from '@/features/auth/AuthProvider';
+import { ContentProvider } from '@/features/content/ContentProvider';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { AuthGuard } from '@/features/auth/AuthGuard';
 
@@ -32,13 +33,23 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<AuthGuard />}>
               <Route
-                path="/"
                 element={
-                  <div className="flex min-h-screen items-center justify-center">
-                    <h1 className="text-2xl font-bold">Dashboard placeholder</h1>
-                  </div>
+                  <ContentProvider>
+                    <Outlet />
+                  </ContentProvider>
                 }
-              />
+              >
+                <Route
+                  path="/"
+                  element={
+                    <div className="flex min-h-screen items-center justify-center">
+                      <h1 className="text-2xl font-bold">
+                        Dashboard placeholder
+                      </h1>
+                    </div>
+                  }
+                />
+              </Route>
             </Route>
           </Routes>
         </BrowserRouter>

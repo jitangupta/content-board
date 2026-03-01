@@ -50,10 +50,10 @@ Example: `P3-01_sidebar.md` = Phase 3, first task, sidebar component.
 
 | Task | File | Branch | Status | Depends On |
 |------|------|--------|--------|------------|
-| Authentication | `P2-01_authentication.md` | `main` | [ ] | P1-02 |
-| Types & data model | `P2-02_types.md` | `main` | [ ] | P2-01 |
-| Firestore service layer | `P2-03_firestore-service.md` | `main` | [ ] | P2-02 |
-| Content Context + reducer | `P2-04_content-context.md` | `main` | [ ] | P2-03 |
+| Authentication | `P2-01_authentication.md` | `main` | [x] | P1-02 |
+| Types & data model | `P2-02_types.md` | `main` | [x] | P2-01 |
+| Firestore service layer | `P2-03_firestore-service.md` | `main` | [x] | P2-02 |
+| Content Context + reducer | `P2-04_content-context.md` | `main` | [x] | P2-03 |
 
 ## Phase 3 — Layout & Core UI (Parallel)
 
