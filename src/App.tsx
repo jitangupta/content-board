@@ -5,7 +5,7 @@ import { ContentProvider } from '@/features/content/ContentProvider';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { AuthGuard } from '@/features/auth/AuthGuard';
 import { DashboardLayout } from '@/components/DashboardLayout';
-import { DetailPanelPlaceholder } from '@/components/DetailPanel/DetailPanelPlaceholder';
+import { DetailPanel } from '@/components/DetailPanel/DetailPanel';
 
 function AppErrorFallback() {
   return (
@@ -42,9 +42,9 @@ function App() {
                 }
               >
                 <Route path="/" element={<Navigate to="/content" replace />} />
-                <Route path="/content" element={<DetailPanelPlaceholder />} />
-                <Route path="/content/:contentId" element={<DetailPanelPlaceholder />} />
-                <Route path="/content/:contentId/:tab" element={<DetailPanelPlaceholder />} />
+                <Route path="/content" element={<DetailPanel />} />
+                <Route path="/content/:contentId" element={<DetailPanel />} />
+                <Route path="/content/:contentId/:tab" element={<DetailPanel />} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
