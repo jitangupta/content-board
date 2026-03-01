@@ -1,9 +1,6 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Trash2, Plus, ExternalLink, X } from 'lucide-react';
-import type { ContentItem, LinkedContent, LinkedContentPlatform } from '@/types/content';
-import { useContent } from '@/features/content/useContent';
-import { addLinkedContent, removeLinkedContent } from '@/services/firestore';
+import type { ContentItem, LinkedContentPlatform } from '@/types/content';
+import { useContentTab } from '@/hooks/useContentTab';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { ChipInput } from '@/components/common/ChipInput';
 import {
@@ -24,9 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { STATUS_ORDER } from '@/utils/statusHelpers';
-
-const PUBLISHED_INDEX = STATUS_ORDER.indexOf('published');
 
 const PLATFORM_OPTIONS: { value: LinkedContentPlatform; label: string }[] = [
   { value: 'blog', label: 'Blog' },
@@ -35,114 +29,39 @@ const PLATFORM_OPTIONS: { value: LinkedContentPlatform; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-function isValidUrl(value: string): boolean {
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 interface ContentTabProps {
   item: ContentItem;
 }
 
 export function ContentTab({ item }: ContentTabProps) {
-  const { updateContent, deleteContent } = useContent();
-  const navigate = useNavigate();
-
-  const [title, setTitle] = useState(item.title);
-  const [description, setDescription] = useState(item.description);
-  const [notes, setNotes] = useState(item.notes);
-  const [youtubeUrl, setYoutubeUrl] = useState(item.youtubeUrl ?? '');
-  const [deleting, setDeleting] = useState(false);
-
-  // Linked content form state
-  const [showLinkForm, setShowLinkForm] = useState(false);
-  const [linkPlatform, setLinkPlatform] = useState<LinkedContentPlatform>('blog');
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkLabel, setLinkLabel] = useState('');
-  const [linkError, setLinkError] = useState('');
-
-  const showYoutubeField = STATUS_ORDER.indexOf(item.status) >= PUBLISHED_INDEX;
-
-  async function handleBlur(
-    field: string,
-    value: string,
-    original: string,
-  ): Promise<void> {
-    if (value === original) return;
-    try {
-      await updateContent(item.id, { [field]: value });
-    } catch {
-      // Error captured by service layer via Sentry
-    }
-  }
-
-  async function handleYoutubeBlur(): Promise<void> {
-    const newValue = youtubeUrl || null;
-    if (newValue === item.youtubeUrl) return;
-    try {
-      await updateContent(item.id, { youtubeUrl: newValue });
-    } catch {
-      // Error captured by service layer via Sentry
-    }
-  }
-
-  async function handleTagsChange(tags: string[]): Promise<void> {
-    try {
-      await updateContent(item.id, { tags });
-    } catch {
-      // Error captured by service layer via Sentry
-    }
-  }
-
-  async function handleDelete(): Promise<void> {
-    setDeleting(true);
-    try {
-      await deleteContent(item.id);
-      navigate('/content');
-    } catch {
-      setDeleting(false);
-      // Error captured by service layer via Sentry
-    }
-  }
-
-  async function handleAddLink(): Promise<void> {
-    if (!linkUrl.trim() || !linkLabel.trim()) {
-      setLinkError('URL and label are required');
-      return;
-    }
-    if (!isValidUrl(linkUrl)) {
-      setLinkError('Enter a valid URL (e.g., https://example.com)');
-      return;
-    }
-    setLinkError('');
-    const link: LinkedContent = {
-      id: crypto.randomUUID(),
-      platform: linkPlatform,
-      url: linkUrl.trim(),
-      label: linkLabel.trim(),
-    };
-    try {
-      await addLinkedContent(item.id, link);
-      setShowLinkForm(false);
-      setLinkUrl('');
-      setLinkLabel('');
-      setLinkPlatform('blog');
-    } catch {
-      // Error captured by service layer via Sentry
-    }
-  }
-
-  async function handleRemoveLink(linkId: string): Promise<void> {
-    try {
-      await removeLinkedContent(item.id, linkId);
-    } catch {
-      // Error captured by service layer via Sentry
-    }
-  }
+  const {
+    title,
+    setTitle,
+    description,
+    setDescription,
+    notes,
+    setNotes,
+    youtubeUrl,
+    setYoutubeUrl,
+    deleting,
+    showYoutubeField,
+    showLinkForm,
+    setShowLinkForm,
+    linkPlatform,
+    setLinkPlatform,
+    linkUrl,
+    setLinkUrl,
+    linkLabel,
+    setLinkLabel,
+    linkError,
+    setLinkError,
+    handleBlur,
+    handleYoutubeBlur,
+    handleTagsChange,
+    handleDelete,
+    handleAddLink,
+    handleRemoveLink,
+  } = useContentTab(item);
 
   return (
     <div className="space-y-6 p-6">
@@ -287,6 +206,7 @@ export function ContentTab({ item }: ContentTabProps) {
           <div className="space-y-2 rounded-md border p-3">
             <Select
               value={linkPlatform}
+              // Select onValueChange returns string, but values are constrained to PLATFORM_OPTIONS which are all LinkedContentPlatform
               onValueChange={(v) => setLinkPlatform(v as LinkedContentPlatform)}
             >
               <SelectTrigger className="w-full">

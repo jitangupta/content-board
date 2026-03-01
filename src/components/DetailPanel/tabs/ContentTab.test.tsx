@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen} from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import {
@@ -17,10 +17,6 @@ vi.mock('@/services/firebase', () => ({
 vi.mock('@/services/firestore', () => ({
   addLinkedContent: vi.fn().mockResolvedValue(undefined),
   removeLinkedContent: vi.fn().mockResolvedValue(undefined),
-  STATUS_ORDER: [
-    'draft', 'technically-ready', 'shooting-script-ready', 'ready-to-record',
-    'recorded', 'edited', 'published', 'extracted-shorts', 'lifetime-value-ends',
-  ],
 }));
 
 function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
