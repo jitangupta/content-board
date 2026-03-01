@@ -1,4 +1,8 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { SentryErrorBoundary } from '@/services/sentry';
+import { AuthProvider } from '@/features/auth/AuthProvider';
+import { LoginPage } from '@/features/auth/LoginPage';
+import { AuthGuard } from '@/features/auth/AuthGuard';
 
 function AppErrorFallback() {
   return (
@@ -22,9 +26,23 @@ function AppErrorFallback() {
 function App() {
   return (
     <SentryErrorBoundary fallback={<AppErrorFallback />}>
-      <div className="flex min-h-screen items-center justify-center">
-        <h1 className="text-4xl font-bold text-red-500">Content Board</h1>
-      </div>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route element={<AuthGuard />}>
+              <Route
+                path="/"
+                element={
+                  <div className="flex min-h-screen items-center justify-center">
+                    <h1 className="text-2xl font-bold">Dashboard placeholder</h1>
+                  </div>
+                }
+              />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </SentryErrorBoundary>
   );
 }
