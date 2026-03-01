@@ -62,7 +62,7 @@ Example: `P3-01_sidebar.md` = Phase 3, first task, sidebar component.
 | Layout shell + routing | `P3-01_layout-shell.md` | `feature/layout-shell` | [x] | P2-04 |
 | Sidebar + phase groups | `P3-02_sidebar.md` | `feature/sidebar` | [x] | P3-01 |
 | Detail panel + Content tab | `P3-03_detail-panel.md` | `feature/detail-panel` | [x] | P3-01 |
-| Status transitions UI | `P3-04_status-transitions.md` | `feature/status-transitions` | [ ] | P3-03 |
+| Status transitions UI | `P3-04_status-transitions.md` | `feature/status-transitions` | [x] | P3-03 |
 
 **Parallel strategy:** P3-01 (layout shell) must land first — it creates the Outlet structure. Then P3-02 and P3-03 run in parallel (sidebar and detail panel are separate component trees). P3-04 depends on P3-03.
 
