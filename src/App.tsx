@@ -1,9 +1,11 @@
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { SentryErrorBoundary } from '@/services/sentry';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { ContentProvider } from '@/features/content/ContentProvider';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { AuthGuard } from '@/features/auth/AuthGuard';
+import { DashboardLayout } from '@/components/DashboardLayout';
+import { DetailPanelPlaceholder } from '@/components/DetailPanel/DetailPanelPlaceholder';
 
 function AppErrorFallback() {
   return (
@@ -35,22 +37,17 @@ function App() {
               <Route
                 element={
                   <ContentProvider>
-                    <Outlet />
+                    <DashboardLayout />
                   </ContentProvider>
                 }
               >
-                <Route
-                  path="/"
-                  element={
-                    <div className="flex min-h-screen items-center justify-center">
-                      <h1 className="text-2xl font-bold">
-                        Dashboard placeholder
-                      </h1>
-                    </div>
-                  }
-                />
+                <Route path="/" element={<Navigate to="/content" replace />} />
+                <Route path="/content" element={<DetailPanelPlaceholder />} />
+                <Route path="/content/:contentId" element={<DetailPanelPlaceholder />} />
+                <Route path="/content/:contentId/:tab" element={<DetailPanelPlaceholder />} />
               </Route>
             </Route>
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>
