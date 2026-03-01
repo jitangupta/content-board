@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useContent } from '@/features/content/useContent';
+import { StatusTransition } from '@/components/DetailPanel/StatusTransition';
 import { TabNavigation } from '@/components/DetailPanel/TabNavigation';
 import { ContentTab } from '@/components/DetailPanel/tabs/ContentTab';
 import { ProductionTab } from '@/components/DetailPanel/tabs/ProductionTab';
@@ -56,7 +57,8 @@ export function DetailPanel() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b px-6 pt-4 pb-0">
+      <div className="space-y-4 border-b px-6 pt-4 pb-4">
+        <StatusTransition item={item} />
         <TabNavigation contentId={contentId} activeTab={activeTab} />
       </div>
       <div className="flex-1 overflow-y-auto">
