@@ -63,7 +63,7 @@ export function DetailPanel() {
       </div>
       <div className="flex-1 overflow-y-auto">
         {activeTab === 'content' && <ContentTab item={item} />}
-        {activeTab === 'production' && <ProductionTab />}
+        {activeTab === 'production' && <ProductionTab item={item} />}
         {activeTab === 'learn' && <LearnTab />}
         {activeTab === 'feedback' && <FeedbackTab />}
       </div>
