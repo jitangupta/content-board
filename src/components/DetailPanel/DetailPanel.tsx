@@ -65,7 +65,7 @@ export function DetailPanel() {
         {activeTab === 'content' && <ContentTab item={item} />}
         {activeTab === 'production' && <ProductionTab />}
         {activeTab === 'learn' && <LearnTab item={item} />}
-        {activeTab === 'feedback' && <FeedbackTab />}
+        {activeTab === 'feedback' && <FeedbackTab item={item} />}
       </div>
     </div>
   );
