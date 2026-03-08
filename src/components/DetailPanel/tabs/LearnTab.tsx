@@ -1,7 +1,14 @@
-export function LearnTab() {
+import type { ContentItem } from '@/types/content';
+import { LearningList } from '@/features/learn/LearningList';
+
+interface LearnTabProps {
+  item: ContentItem;
+}
+
+export function LearnTab({ item }: LearnTabProps) {
   return (
-    <div className="flex h-64 items-center justify-center">
-      <p className="text-muted-foreground">Learn tab coming soon</p>
+    <div className="p-6">
+      <LearningList item={item} />
     </div>
   );
 }

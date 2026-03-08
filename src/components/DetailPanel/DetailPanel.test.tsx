@@ -22,6 +22,9 @@ vi.mock('@/services/firestore', () => ({
   addTalkingPoint: vi.fn().mockResolvedValue(undefined),
   removeTalkingPoint: vi.fn().mockResolvedValue(undefined),
   updateContent: vi.fn().mockResolvedValue(undefined),
+  addFeedback: vi.fn().mockResolvedValue(undefined),
+  updateFeedback: vi.fn().mockResolvedValue(undefined),
+  removeFeedback: vi.fn().mockResolvedValue(undefined),
 }));
 
 function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
@@ -129,14 +132,16 @@ describe('DetailPanel', () => {
     expect(screen.getByText('Thumbnail Ideas')).toBeInTheDocument();
   });
 
-  it('shows learn placeholder for learn tab', () => {
+  it('shows learn tab with empty state', () => {
     renderDetailPanel('/content/item-1/learn');
-    expect(screen.getByText('Learn tab coming soon')).toBeInTheDocument();
+    expect(
+      screen.getByText('No learnings yet. Capture what you learned while creating this video.'),
+    ).toBeInTheDocument();
   });
 
-  it('shows feedback placeholder for feedback tab', () => {
+  it('shows feedback tab content for feedback tab', () => {
     renderDetailPanel('/content/item-1/feedback');
-    expect(screen.getByText('Feedback tab coming soon')).toBeInTheDocument();
+    expect(screen.getByText('Add Feedback')).toBeInTheDocument();
   });
 
   it('falls back to content tab for invalid tab name', () => {
