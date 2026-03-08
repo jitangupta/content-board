@@ -1,7 +1,14 @@
-export function FeedbackTab() {
+import type { ContentItem } from '@/types/content';
+import { FeedbackList } from '@/features/feedback/FeedbackList';
+
+interface FeedbackTabProps {
+  item: ContentItem;
+}
+
+export function FeedbackTab({ item }: FeedbackTabProps) {
   return (
-    <div className="flex h-64 items-center justify-center">
-      <p className="text-muted-foreground">Feedback tab coming soon</p>
+    <div className="p-6">
+      <FeedbackList item={item} />
     </div>
   );
 }

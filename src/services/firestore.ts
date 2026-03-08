@@ -374,6 +374,13 @@ export function addFeedback(
   return addArrayItem(contentId, 'feedback', feedback, 'addFeedback');
 }
 
+export function updateFeedback(
+  contentId: string,
+  feedback: Feedback,
+): Promise<void> {
+  return updateArrayItem(contentId, 'feedback', feedback, 'updateFeedback');
+}
+
 export function removeFeedback(
   contentId: string,
   feedbackId: string,

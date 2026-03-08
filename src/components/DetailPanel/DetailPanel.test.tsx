@@ -13,6 +13,12 @@ vi.mock('@/services/firebase', () => ({
   db: {},
 }));
 
+vi.mock('@/services/firestore', () => ({
+  addFeedback: vi.fn().mockResolvedValue(undefined),
+  updateFeedback: vi.fn().mockResolvedValue(undefined),
+  removeFeedback: vi.fn().mockResolvedValue(undefined),
+}));
+
 function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
   return {
     id: 'item-1',
@@ -120,9 +126,9 @@ describe('DetailPanel', () => {
     expect(screen.getByText('Learn tab coming soon')).toBeInTheDocument();
   });
 
-  it('shows feedback placeholder for feedback tab', () => {
+  it('shows feedback tab content for feedback tab', () => {
     renderDetailPanel('/content/item-1/feedback');
-    expect(screen.getByText('Feedback tab coming soon')).toBeInTheDocument();
+    expect(screen.getByText('Add Feedback')).toBeInTheDocument();
   });
 
   it('falls back to content tab for invalid tab name', () => {
