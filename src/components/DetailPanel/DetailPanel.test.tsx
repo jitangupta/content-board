@@ -14,6 +14,14 @@ vi.mock('@/services/firebase', () => ({
 }));
 
 vi.mock('@/services/firestore', () => ({
+  addLinkedContent: vi.fn().mockResolvedValue(undefined),
+  removeLinkedContent: vi.fn().mockResolvedValue(undefined),
+  addDemoItem: vi.fn().mockResolvedValue(undefined),
+  updateDemoItem: vi.fn().mockResolvedValue(undefined),
+  removeDemoItem: vi.fn().mockResolvedValue(undefined),
+  addTalkingPoint: vi.fn().mockResolvedValue(undefined),
+  removeTalkingPoint: vi.fn().mockResolvedValue(undefined),
+  updateContent: vi.fn().mockResolvedValue(undefined),
   addFeedback: vi.fn().mockResolvedValue(undefined),
   updateFeedback: vi.fn().mockResolvedValue(undefined),
   removeFeedback: vi.fn().mockResolvedValue(undefined),
@@ -116,9 +124,12 @@ describe('DetailPanel', () => {
     expect(screen.getByDisplayValue('Test Video')).toBeInTheDocument();
   });
 
-  it('shows production placeholder for production tab', () => {
+  it('shows production tab sections for production tab', () => {
     renderDetailPanel('/content/item-1/production');
-    expect(screen.getByText('Production tab coming soon')).toBeInTheDocument();
+    expect(screen.getByText('Demo Items')).toBeInTheDocument();
+    expect(screen.getByText('Talking Points')).toBeInTheDocument();
+    expect(screen.getByText('Shooting Script')).toBeInTheDocument();
+    expect(screen.getByText('Thumbnail Ideas')).toBeInTheDocument();
   });
 
   it('shows learn tab with empty state', () => {
