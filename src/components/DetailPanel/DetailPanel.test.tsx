@@ -121,9 +121,11 @@ describe('DetailPanel', () => {
     expect(screen.getByText('Production tab coming soon')).toBeInTheDocument();
   });
 
-  it('shows learn placeholder for learn tab', () => {
+  it('shows learn tab with empty state', () => {
     renderDetailPanel('/content/item-1/learn');
-    expect(screen.getByText('Learn tab coming soon')).toBeInTheDocument();
+    expect(
+      screen.getByText('No learnings yet. Capture what you learned while creating this video.'),
+    ).toBeInTheDocument();
   });
 
   it('shows feedback tab content for feedback tab', () => {
