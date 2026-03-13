@@ -9,7 +9,31 @@ export type ContentStatus =
   | 'extracted-shorts'
   | 'lifetime-value-ends';
 
+export type ShortStatus =
+  | 'draft'
+  | 'ready-to-record'
+  | 'recorded'
+  | 'edited'
+  | 'published';
+
 export type ContentPhase = 'pre-production' | 'production' | 'post-production';
+
+export type ContentType = 'video' | 'short';
+
+export type ShortPlatform =
+  | 'youtube-shorts'
+  | 'instagram-reels'
+  | 'linkedin'
+  | 'tiktok'
+  | 'other';
+
+export interface PlatformVersion {
+  id: string;
+  platform: ShortPlatform;
+  url: string;
+  published: boolean;
+  notes: string;
+}
 
 export type DemoItemType =
   | 'repo'
@@ -36,7 +60,7 @@ export interface TalkingPoint {
   order: number;
 }
 
-export type LinkedContentPlatform = 'blog' | 'linkedin' | 'twitter' | 'other';
+export type LinkedContentPlatform = 'blog' | 'linkedin' | 'twitter' | 'canva' | 'chatgpt' | 'claude' | 'other';
 
 export interface LinkedContent {
   id: string;
@@ -61,6 +85,12 @@ export interface Feedback {
   dateAdded: string;
 }
 
+export interface AggregatedFeedback {
+  feedback: Feedback;
+  contentId: string;
+  contentTitle: string;
+}
+
 export interface ContentTimestamps {
   created: string;
   technicallyReady: string | null;
@@ -82,13 +112,17 @@ export interface ContentItem {
   status: ContentStatus;
   phase: ContentPhase;
   order: number;
+  contentType: ContentType;
+  parentVideoId: string | null;
+  script: string | null;
+  platformVersions: PlatformVersion[];
   youtubeUrl: string | null;
   demoItems: DemoItem[];
   talkingPoints: TalkingPoint[];
-  shootingScript: string;
-  thumbnailIdeas: string[];
+  shootingScript: string | null;
+  thumbnailIdeas: string | null;
   linkedContent: LinkedContent[];
-  notes: string;
+  notes: string | null;
   learnings: Learning[];
   feedback: Feedback[];
   timestamps: ContentTimestamps;

@@ -1,83 +1,88 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { AuthContext, type AuthContextValue } from '@/features/auth/AuthProvider';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthGuard } from '@/features/auth/AuthGuard';
-import type { User } from '@/services/auth';
+import { useAuth } from '@/features/auth/useAuth';
+import type { AuthContextValue } from '@/types/auth';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-}));
+vi.mock('@/features/auth/useAuth');
 
-function renderWithAuth(authValue: AuthContextValue, route = '/') {
+function renderWithRouter() {
   return render(
-    <AuthContext.Provider value={authValue}>
-      <MemoryRouter initialEntries={[route]}>
-        <Routes>
-          <Route path="/login" element={<div>Login Page</div>} />
-          <Route element={<AuthGuard />}>
-            <Route path="/" element={<div>Dashboard</div>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
-    </AuthContext.Provider>,
+    <MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route element={<AuthGuard />}>
+          <Route path="/" element={<div>Protected content</div>} />
+        </Route>
+        <Route path="/login" element={<div>Login page</div>} />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
 describe('AuthGuard', () => {
   it('shows spinner when loading', () => {
-    renderWithAuth({
+    vi.mocked(useAuth).mockReturnValue({
       user: null,
       loading: true,
       signIn: vi.fn(),
       signOut: vi.fn(),
-    });
+    } satisfies AuthContextValue);
 
-    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
-    expect(screen.queryByText('Login Page')).not.toBeInTheDocument();
+    renderWithRouter();
+
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument();
+    expect(screen.queryByText('Login page')).not.toBeInTheDocument();
   });
 
   it('redirects to /login when not authenticated', () => {
-    renderWithAuth({
+    vi.mocked(useAuth).mockReturnValue({
       user: null,
       loading: false,
       signIn: vi.fn(),
       signOut: vi.fn(),
-    });
+    } satisfies AuthContextValue);
 
-    expect(screen.getByText('Login Page')).toBeInTheDocument();
+    renderWithRouter();
+
+    expect(screen.getByText('Login page')).toBeInTheDocument();
   });
 
   it('shows access denied for unauthorized email', () => {
-    const unauthorizedUser = {
-      email: 'wrong@example.com',
-    } as User;
-
-    renderWithAuth({
-      user: unauthorizedUser,
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        uid: '123',
+        email: 'wrong@example.com',
+        displayName: 'Wrong User',
+        photoURL: null,
+      },
       loading: false,
       signIn: vi.fn(),
       signOut: vi.fn(),
-    });
+    } satisfies AuthContextValue);
 
-    expect(screen.getByText('Access denied')).toBeInTheDocument();
-    expect(
-      screen.getByText(/wrong@example\.com/),
-    ).toBeInTheDocument();
+    renderWithRouter();
+
+    expect(screen.getByText('Access Denied')).toBeInTheDocument();
+    expect(screen.getByText(/wrong@example.com/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 
-  it('renders children for authorized user', () => {
-    const authorizedUser = {
-      email: 'gtangupta@gmail.com',
-    } as User;
-
-    renderWithAuth({
-      user: authorizedUser,
+  it('renders protected content for authorized user', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        uid: '123',
+        email: 'gtangupta@gmail.com',
+        displayName: 'GT',
+        photoURL: null,
+      },
       loading: false,
       signIn: vi.fn(),
       signOut: vi.fn(),
-    });
+    } satisfies AuthContextValue);
 
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    renderWithRouter();
+
+    expect(screen.getByText('Protected content')).toBeInTheDocument();
   });
 });

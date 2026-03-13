@@ -1,69 +1,58 @@
-import { createContext, useEffect, useReducer, type ReactNode } from 'react';
+import { useEffect, useReducer } from 'react';
+import type { ReactNode } from 'react';
+import type { AuthAction, AuthContextValue, AuthState, AuthUser } from '@/types/auth';
 import {
   onAuthStateChanged,
   signInWithGoogle,
   signOut,
-  type User,
 } from '@/services/auth';
+import { AuthContext } from '@/features/auth/AuthContext';
 
-interface AuthState {
-  user: User | null;
-  loading: boolean;
-}
-
-type AuthAction =
-  | { type: 'SET_USER'; user: User | null }
-  | { type: 'SET_LOADING'; loading: boolean };
+const initialState: AuthState = {
+  user: null,
+  loading: true,
+};
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
   switch (action.type) {
     case 'SET_USER':
-      return { user: action.user, loading: false };
+      return { ...state, user: action.payload, loading: false };
     case 'SET_LOADING':
-      return { ...state, loading: action.loading };
+      return { ...state, loading: action.payload };
   }
 }
-
-export interface AuthContextValue {
-  user: User | null;
-  loading: boolean;
-  signIn: () => Promise<void>;
-  signOut: () => Promise<void>;
-}
-
-export const AuthContext = createContext<AuthContextValue | null>(null);
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [state, dispatch] = useReducer(authReducer, {
-    user: null,
-    loading: true,
-  });
+  const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged((user) => {
-      dispatch({ type: 'SET_USER', user });
+    const unsubscribe = onAuthStateChanged((firebaseUser) => {
+      if (firebaseUser) {
+        const user: AuthUser = {
+          uid: firebaseUser.uid,
+          email: firebaseUser.email ?? '',
+          displayName: firebaseUser.displayName,
+          photoURL: firebaseUser.photoURL,
+        };
+        dispatch({ type: 'SET_USER', payload: user });
+      } else {
+        dispatch({ type: 'SET_USER', payload: null });
+      }
     });
+
     return unsubscribe;
   }, []);
 
-  async function handleSignIn(): Promise<void> {
-    await signInWithGoogle();
-  }
+  const value: AuthContextValue = {
+    user: state.user,
+    loading: state.loading,
+    signIn: signInWithGoogle,
+    signOut: signOut,
+  };
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user: state.user,
-        loading: state.loading,
-        signIn: handleSignIn,
-        signOut,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

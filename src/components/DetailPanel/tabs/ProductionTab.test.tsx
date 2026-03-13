@@ -1,47 +1,66 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import {
-  ContentContext,
-  type ContentContextValue,
-} from '@/features/content/ContentProvider';
-import { ProductionTab } from './ProductionTab';
+import userEvent from '@testing-library/user-event';
+import { ProductionTab } from '@/components/DetailPanel/tabs/ProductionTab';
 import type { ContentItem } from '@/types/content';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-  db: {},
+const updateContentMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@/features/content/useContent', () => ({
+  useContent: () => ({
+    contents: [],
+    loading: false,
+    error: null,
+    createContent: vi.fn(),
+    updateContent: updateContentMock,
+    deleteContent: vi.fn(),
+    updateStatus: vi.fn(),
+    reorderContents: vi.fn(),
+  }),
 }));
 
-vi.mock('@/services/firestore', () => ({
-  addDemoItem: vi.fn().mockResolvedValue(undefined),
-  updateDemoItem: vi.fn().mockResolvedValue(undefined),
-  removeDemoItem: vi.fn().mockResolvedValue(undefined),
-  addTalkingPoint: vi.fn().mockResolvedValue(undefined),
-  removeTalkingPoint: vi.fn().mockResolvedValue(undefined),
-  updateContent: vi.fn().mockResolvedValue(undefined),
+vi.mock('@/features/production/useProduction', () => ({
+  useProduction: () => ({
+    demoItemOp: { loading: false, error: null },
+    talkingPointOp: { loading: false, error: null },
+    addDemoItem: vi.fn(),
+    updateDemoItem: vi.fn(),
+    removeDemoItem: vi.fn(),
+    addTalkingPoint: vi.fn(),
+    updateTalkingPoint: vi.fn(),
+    removeTalkingPoint: vi.fn(),
+    handleReorderTalkingPoints: vi.fn(),
+  }),
 }));
 
-function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
+vi.mock('@/services/sentry', () => ({
+  captureError: vi.fn(),
+}));
+
+function makeContentItem(overrides: Partial<ContentItem> = {}): ContentItem {
   return {
-    id: 'item-1',
+    id: 'abc123',
     title: 'Test Video',
     description: 'A test description',
-    tags: ['react'],
+    tags: [],
     status: 'draft',
     phase: 'pre-production',
     order: 0,
+    contentType: 'video',
+    parentVideoId: null,
+    script: null,
+    platformVersions: [],
     youtubeUrl: null,
     demoItems: [],
     talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
+    shootingScript: null,
+    thumbnailIdeas: null,
     linkedContent: [],
-    notes: '',
+    notes: null,
     learnings: [],
     feedback: [],
     timestamps: {
-      created: '2026-01-01',
+      created: '2024-01-01',
       technicallyReady: null,
       shootingScriptReady: null,
       readyToRecord: null,
@@ -50,104 +69,167 @@ function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
       published: null,
       shortsExtracted: null,
       lifetimeValueEnds: null,
-      updated: '2026-01-01',
+      updated: '2024-01-01',
     },
     ...overrides,
   };
 }
 
-function renderProductionTab(
-  item: ContentItem,
-  contextOverrides: Partial<ContentContextValue> = {},
-): ReturnType<typeof render> {
-  const defaultContext: ContentContextValue = {
-    contents: [item],
-    loading: false,
-    error: null,
-    createContent: vi.fn(),
-    updateContent: vi.fn().mockResolvedValue(undefined),
-    deleteContent: vi.fn().mockResolvedValue(undefined),
-    updateStatus: vi.fn(),
-    ...contextOverrides,
-  };
-
-  return render(
-    <ContentContext.Provider value={defaultContext}>
-      <MemoryRouter>
-        <ProductionTab item={item} />
-      </MemoryRouter>
-    </ContentContext.Provider>,
-  );
-}
-
 describe('ProductionTab', () => {
+  beforeEach(() => {
+    updateContentMock.mockClear();
+  });
+
   it('renders all four sections', () => {
-    renderProductionTab(createMockItem());
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
 
     expect(screen.getByText('Demo Items')).toBeInTheDocument();
     expect(screen.getByText('Talking Points')).toBeInTheDocument();
-    expect(screen.getByText('Shooting Script')).toBeInTheDocument();
-    expect(screen.getByText('Thumbnail Ideas')).toBeInTheDocument();
+    expect(screen.getByLabelText('Shooting Script')).toBeInTheDocument();
+    expect(screen.getByLabelText('Thumbnail Ideas')).toBeInTheDocument();
   });
 
   it('renders empty states for demo items and talking points', () => {
-    renderProductionTab(createMockItem());
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
 
     expect(screen.getByText(/No demo items yet/)).toBeInTheDocument();
     expect(screen.getByText(/No talking points yet/)).toBeInTheDocument();
   });
 
-  it('renders shooting script textarea with placeholder', () => {
-    renderProductionTab(createMockItem());
-    expect(screen.getByPlaceholderText('Outline your scene-by-scene flow...')).toBeInTheDocument();
+  it('renders shooting script with existing value', () => {
+    const content = makeContentItem({
+      shootingScript: 'Scene 1: Intro',
+    });
+    render(<ProductionTab content={content} />);
+
+    expect(screen.getByLabelText('Shooting Script')).toHaveValue(
+      'Scene 1: Intro',
+    );
   });
 
-  it('renders thumbnail ideas textarea with placeholder', () => {
-    renderProductionTab(createMockItem());
-    expect(screen.getByPlaceholderText(/visual concepts/)).toBeInTheDocument();
+  it('renders thumbnail ideas with existing value', () => {
+    const content = makeContentItem({
+      thumbnailIdeas: 'Close-up of code editor',
+    });
+    render(<ProductionTab content={content} />);
+
+    expect(screen.getByLabelText('Thumbnail Ideas')).toHaveValue(
+      'Close-up of code editor',
+    );
   });
 
-  it('renders existing shooting script content', () => {
-    renderProductionTab(createMockItem({ shootingScript: 'Scene 1: Intro' }));
-    expect(screen.getByDisplayValue('Scene 1: Intro')).toBeInTheDocument();
+  it('renders shooting script placeholder text', () => {
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
+
+    expect(
+      screen.getByPlaceholderText('Outline your scene-by-scene flow...'),
+    ).toBeInTheDocument();
   });
 
-  it('renders existing thumbnail ideas', () => {
-    renderProductionTab(createMockItem({ thumbnailIdeas: ['Red background', 'Code on screen'] }));
-    const textarea = screen.getByPlaceholderText(/visual concepts/) as HTMLTextAreaElement;
-    expect(textarea.value).toBe('Red background\nCode on screen');
+  it('renders thumbnail ideas placeholder text', () => {
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
+
+    expect(
+      screen.getByPlaceholderText(
+        'Describe visual concepts for your thumbnail...',
+      ),
+    ).toBeInTheDocument();
   });
 
-  it('renders existing demo items', () => {
-    renderProductionTab(createMockItem({
+  it('renders demo items when present', () => {
+    const content = makeContentItem({
       demoItems: [
-        { id: '1', type: 'repo', description: 'Sample repo', verified: false },
+        {
+          id: 'd1',
+          type: 'repo',
+          description: 'Example repo',
+          verified: false,
+        },
       ],
-    }));
-    expect(screen.getByText('Sample repo')).toBeInTheDocument();
+    });
+    render(<ProductionTab content={content} />);
+
+    expect(screen.getByText('Example repo')).toBeInTheDocument();
     expect(screen.getByText('Repo')).toBeInTheDocument();
   });
 
-  it('renders existing talking points with order numbers', () => {
-    renderProductionTab(createMockItem({
+  it('renders talking points when present', () => {
+    const content = makeContentItem({
       talkingPoints: [
-        { id: '1', text: 'First point', category: 'technical', priority: 'must-say', order: 0 },
-        { id: '2', text: 'Second point', category: 'engagement', priority: 'nice-to-have', order: 1 },
+        {
+          id: 'tp1',
+          text: 'Explain hooks',
+          category: 'technical',
+          priority: 'must-say',
+          order: 0,
+        },
       ],
-    }));
-    expect(screen.getByText('First point')).toBeInTheDocument();
-    expect(screen.getByText('Second point')).toBeInTheDocument();
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
+    });
+    render(<ProductionTab content={content} />);
+
+    expect(screen.getByText('Explain hooks')).toBeInTheDocument();
+    expect(screen.getByText('Technical')).toBeInTheDocument();
   });
 
-  it('renders Add Demo Item button', () => {
-    renderProductionTab(createMockItem());
-    expect(screen.getByText('Add Demo Item')).toBeInTheDocument();
+  it('does not show Save/Discard when no changes are made', () => {
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
+
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument();
   });
 
-  it('renders Add Talking Point button', () => {
-    renderProductionTab(createMockItem());
-    expect(screen.getByText('Add Talking Point')).toBeInTheDocument();
+  it('shows Save/Discard when shooting script is edited', async () => {
+    const user = userEvent.setup();
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
+
+    await user.type(screen.getByLabelText('Shooting Script'), 'Scene 1');
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+  });
+
+  it('saves shooting script on Save click', async () => {
+    const user = userEvent.setup();
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
+
+    await user.type(screen.getByLabelText('Shooting Script'), 'Scene 1');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(updateContentMock).toHaveBeenCalledWith('abc123', {
+      shootingScript: 'Scene 1',
+    });
+  });
+
+  it('saves thumbnail ideas on Save click', async () => {
+    const user = userEvent.setup();
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
+
+    await user.type(screen.getByLabelText('Thumbnail Ideas'), 'Big text overlay');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(updateContentMock).toHaveBeenCalledWith('abc123', {
+      thumbnailIdeas: 'Big text overlay',
+    });
+  });
+
+  it('discards changes when Discard is clicked', async () => {
+    const user = userEvent.setup();
+    const content = makeContentItem();
+    render(<ProductionTab content={content} />);
+
+    await user.type(screen.getByLabelText('Shooting Script'), 'Scene 1');
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+
+    expect(screen.getByLabelText('Shooting Script')).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(updateContentMock).not.toHaveBeenCalled();
   });
 });

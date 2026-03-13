@@ -1,104 +1,92 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ContentItem } from '@/components/Sidebar/ContentItem';
-import type { ContentItem as ContentItemType } from '@/types/content';
-
-function createMockItem(overrides: Partial<ContentItemType> = {}): ContentItemType {
-  return {
-    id: 'item-1',
-    title: 'Test Video',
-    description: '',
-    tags: [],
-    status: 'draft',
-    phase: 'pre-production',
-    order: 0,
-    youtubeUrl: null,
-    demoItems: [],
-    talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
-    linkedContent: [],
-    notes: '',
-    learnings: [],
-    feedback: [],
-    timestamps: {
-      created: '2026-01-01',
-      technicallyReady: null,
-      shootingScriptReady: null,
-      readyToRecord: null,
-      recorded: null,
-      edited: null,
-      published: null,
-      shortsExtracted: null,
-      lifetimeValueEnds: null,
-      updated: '2026-01-01',
-    },
-    ...overrides,
-  };
-}
 
 function renderContentItem(
-  item: ContentItemType,
-  route = '/content',
-): ReturnType<typeof render> {
+  props: { id: string; title: string; status: 'draft' | 'published'; contentType?: 'video' | 'short' },
+  initialPath = '/content',
+) {
+  const fullProps = { contentType: 'video' as const, ...props };
   return render(
-    <MemoryRouter initialEntries={[route]}>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Routes>
-        <Route
-          path="/content"
-          element={<ContentItem item={item} />}
-        />
-        <Route
-          path="/content/:contentId"
-          element={<ContentItem item={item} />}
-        />
+        <Route path="/content" element={<ContentItem {...fullProps} />} />
+        <Route path="/content/:contentId" element={<ContentItem {...fullProps} />} />
       </Routes>
     </MemoryRouter>,
   );
 }
 
 describe('ContentItem', () => {
-  it('renders the item title', () => {
-    renderContentItem(createMockItem({ title: 'My Video' }));
+  it('renders title and status badge', () => {
+    renderContentItem({ id: '1', title: 'My Video', status: 'draft' });
+
     expect(screen.getByText('My Video')).toBeInTheDocument();
-  });
-
-  it('shows "Untitled" when title is empty', () => {
-    renderContentItem(createMockItem({ title: '' }));
-    expect(screen.getByText('Untitled')).toBeInTheDocument();
-  });
-
-  it('renders a status badge', () => {
-    renderContentItem(createMockItem({ status: 'draft' }));
     expect(screen.getByText('Draft')).toBeInTheDocument();
   });
 
   it('navigates to /content/:id on click', async () => {
     const user = userEvent.setup();
-    const item = createMockItem({ id: 'abc123' });
 
-    const { container } = render(
+    // We track navigation by checking if the component re-renders at the new route
+    render(
       <MemoryRouter initialEntries={['/content']}>
         <Routes>
-          <Route path="/content" element={<ContentItem item={item} />} />
+          <Route
+            path="/content"
+            element={<ContentItem id="abc" title="Test" status="draft" contentType="video" />}
+          />
           <Route
             path="/content/:contentId"
-            element={<div>Detail view</div>}
+            element={
+              <div>
+                <span data-testid="navigated">Navigated</span>
+                <ContentItem id="abc" title="Test" status="draft" contentType="video" />
+              </div>
+            }
           />
         </Routes>
       </MemoryRouter>,
     );
 
-    await user.click(container.querySelector('button')!);
-    expect(screen.getByText('Detail view')).toBeInTheDocument();
+    await user.click(screen.getByTestId('content-item-abc'));
+
+    expect(screen.getByTestId('navigated')).toBeInTheDocument();
   });
 
-  it('applies selected styling when contentId matches', () => {
-    const item = createMockItem({ id: 'item-1' });
-    const { container } = renderContentItem(item, '/content/item-1');
-    const button = container.querySelector('button');
-    expect(button?.className).toContain('bg-accent');
+  it('applies selected styling when URL matches item id', () => {
+    renderContentItem(
+      { id: 'abc', title: 'Selected Video', status: 'published' },
+      '/content/abc',
+    );
+
+    const button = screen.getByTestId('content-item-abc');
+    expect(button.className).toContain('bg-accent');
+    expect(button.className).toContain('font-medium');
+  });
+
+  it('does not apply selected styling when URL does not match', () => {
+    renderContentItem(
+      { id: 'abc', title: 'Not Selected', status: 'draft' },
+      '/content/other',
+    );
+
+    const button = screen.getByTestId('content-item-abc');
+    expect(button.className).not.toContain('font-medium');
+  });
+
+  it('truncates long titles', () => {
+    renderContentItem({
+      id: '1',
+      title: 'A very long title that should be truncated via CSS',
+      status: 'draft',
+    });
+
+    const titleSpan = screen.getByText(
+      'A very long title that should be truncated via CSS',
+    );
+    expect(titleSpan.className).toContain('truncate');
   });
 });

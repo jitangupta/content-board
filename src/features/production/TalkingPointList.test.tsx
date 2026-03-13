@@ -1,119 +1,184 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { TalkingPointList } from './TalkingPointList';
-import type { TalkingPoint, TalkingPointCategory, TalkingPointPriority } from '@/types/content';
+import { TalkingPointList } from '@/features/production/TalkingPointList';
+import type { TalkingPoint } from '@/types/content';
 
-function createDefaultProps(overrides: Record<string, unknown> = {}) {
+const addTalkingPointMock = vi.fn().mockResolvedValue(undefined);
+const removeTalkingPointMock = vi.fn().mockResolvedValue(undefined);
+const handleReorderTalkingPointsMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@/features/production/useProduction', () => ({
+  useProduction: () => ({
+    talkingPointOp: { loading: false, error: null },
+    demoItemOp: { loading: false, error: null },
+    addTalkingPoint: addTalkingPointMock,
+    updateTalkingPoint: vi.fn(),
+    removeTalkingPoint: removeTalkingPointMock,
+    addDemoItem: vi.fn(),
+    updateDemoItem: vi.fn(),
+    removeDemoItem: vi.fn(),
+    handleReorderTalkingPoints: handleReorderTalkingPointsMock,
+  }),
+}));
+
+vi.mock('@/services/sentry', () => ({
+  captureError: vi.fn(),
+}));
+
+function makeTalkingPoint(
+  overrides: Partial<TalkingPoint> = {},
+): TalkingPoint {
   return {
-    points: [] as TalkingPoint[],
-    showForm: false,
-    setShowForm: vi.fn(),
-    text: '',
-    setText: vi.fn(),
-    category: 'technical' as TalkingPointCategory,
-    setCategory: vi.fn(),
-    priority: 'must-say' as TalkingPointPriority,
-    setPriority: vi.fn(),
-    error: '',
-    onAdd: vi.fn().mockResolvedValue(undefined),
-    onRemove: vi.fn().mockResolvedValue(undefined),
+    id: 'tp-1',
+    text: 'Explain the hook pattern',
+    category: 'technical',
+    priority: 'must-say',
+    order: 0,
     ...overrides,
   };
 }
 
 describe('TalkingPointList', () => {
+  beforeEach(() => {
+    addTalkingPointMock.mockClear();
+    removeTalkingPointMock.mockClear();
+    handleReorderTalkingPointsMock.mockClear();
+  });
+
   it('renders empty state when no points', () => {
-    render(<TalkingPointList {...createDefaultProps()} />);
-    expect(screen.getByText(/No talking points yet/)).toBeInTheDocument();
+    render(<TalkingPointList contentId="c1" points={[]} />);
+
+    expect(
+      screen.getByText(/No talking points yet/),
+    ).toBeInTheDocument();
   });
 
-  it('renders Add Talking Point button', () => {
-    render(<TalkingPointList {...createDefaultProps()} />);
-    expect(screen.getByText('Add Talking Point')).toBeInTheDocument();
-  });
-
-  it('calls setShowForm when Add Talking Point is clicked', async () => {
-    const setShowForm = vi.fn();
-    const user = userEvent.setup();
-    render(<TalkingPointList {...createDefaultProps({ setShowForm })} />);
-
-    await user.click(screen.getByText('Add Talking Point'));
-    expect(setShowForm).toHaveBeenCalledWith(true);
-  });
-
-  it('renders inline form when showForm is true', () => {
-    render(<TalkingPointList {...createDefaultProps({ showForm: true })} />);
-    expect(screen.getByPlaceholderText('What do you want to say?')).toBeInTheDocument();
-  });
-
-  it('shows error message when error is set', () => {
-    render(<TalkingPointList {...createDefaultProps({ showForm: true, error: 'Text is required' })} />);
-    expect(screen.getByText('Text is required')).toBeInTheDocument();
-  });
-
-  it('calls onAdd when Add button is clicked', async () => {
-    const onAdd = vi.fn().mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    render(<TalkingPointList {...createDefaultProps({ showForm: true, onAdd })} />);
-
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-    expect(onAdd).toHaveBeenCalled();
-  });
-
-  it('renders talking points with order numbers, category badges, and text', () => {
-    const points: TalkingPoint[] = [
-      { id: '1', text: 'Introduce the topic', category: 'engagement', priority: 'must-say', order: 0 },
-      { id: '2', text: 'Show the code', category: 'technical', priority: 'nice-to-have', order: 1 },
+  it('renders talking points with order numbers, text, and category badges', () => {
+    const points = [
+      makeTalkingPoint({
+        id: 'tp-1',
+        text: 'Intro hook',
+        category: 'engagement',
+        order: 0,
+      }),
+      makeTalkingPoint({
+        id: 'tp-2',
+        text: 'Show code',
+        category: 'technical',
+        order: 1,
+      }),
     ];
-    render(<TalkingPointList {...createDefaultProps({ points })} />);
+    render(<TalkingPointList contentId="c1" points={points} />);
 
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('Introduce the topic')).toBeInTheDocument();
+    expect(screen.getByText('1.')).toBeInTheDocument();
+    expect(screen.getByText('2.')).toBeInTheDocument();
+    expect(screen.getByText('Intro hook')).toBeInTheDocument();
+    expect(screen.getByText('Show code')).toBeInTheDocument();
     expect(screen.getByText('Engagement')).toBeInTheDocument();
-    expect(screen.getByText('Show the code')).toBeInTheDocument();
     expect(screen.getByText('Technical')).toBeInTheDocument();
   });
 
-  it('sorts talking points by order', () => {
-    const points: TalkingPoint[] = [
-      { id: '2', text: 'Second point', category: 'technical', priority: 'must-say', order: 1 },
-      { id: '1', text: 'First point', category: 'engagement', priority: 'must-say', order: 0 },
+  it('displays priority indicators', () => {
+    const points = [
+      makeTalkingPoint({ id: 'tp-1', priority: 'must-say', order: 0 }),
+      makeTalkingPoint({ id: 'tp-2', priority: 'nice-to-have', order: 1 }),
     ];
-    render(<TalkingPointList {...createDefaultProps({ points })} />);
+    const { container } = render(
+      <TalkingPointList contentId="c1" points={points} />,
+    );
 
-    const orderNumbers = screen.getAllByText(/^[12]$/);
-    expect(orderNumbers[0]).toHaveTextContent('1');
-    expect(orderNumbers[1]).toHaveTextContent('2');
+    const dots = container.querySelectorAll('span[title]');
+    expect(dots[0]).toHaveAttribute('title', 'Must say');
+    expect(dots[1]).toHaveAttribute('title', 'Nice to have');
   });
 
-  it('shows delete confirmation dialog when delete button is clicked', async () => {
-    const points: TalkingPoint[] = [
-      { id: '1', text: 'Point to delete', category: 'technical', priority: 'must-say', order: 0 },
-    ];
+  it('shows inline form when Add Talking Point is clicked', async () => {
     const user = userEvent.setup();
-    render(<TalkingPointList {...createDefaultProps({ points })} />);
+    render(<TalkingPointList contentId="c1" points={[]} />);
 
-    await user.click(screen.getByLabelText('Delete talking point "Point to delete"'));
-    expect(screen.getByText('Delete talking point?')).toBeInTheDocument();
+    await user.click(screen.getByText('Add Talking Point'));
+
+    expect(screen.getByLabelText('Talking Point')).toBeInTheDocument();
+    expect(screen.getByLabelText('Category')).toBeInTheDocument();
+    expect(screen.getByLabelText('Priority')).toBeInTheDocument();
   });
 
-  it('calls onRemove when delete is confirmed', async () => {
-    const onRemove = vi.fn().mockResolvedValue(undefined);
-    const points: TalkingPoint[] = [
-      { id: '1', text: 'Point to delete', category: 'technical', priority: 'must-say', order: 0 },
-    ];
+  it('calls addTalkingPoint with correct data on form submit', async () => {
     const user = userEvent.setup();
-    render(<TalkingPointList {...createDefaultProps({ points, onRemove })} />);
+    render(<TalkingPointList contentId="c1" points={[]} />);
 
-    await user.click(screen.getByLabelText('Delete talking point "Point to delete"'));
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
-    expect(onRemove).toHaveBeenCalledWith('1');
+    await user.click(screen.getByText('Add Talking Point'));
+    await user.type(screen.getByLabelText('Talking Point'), 'Subscribe CTA');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(addTalkingPointMock).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({
+        text: 'Subscribe CTA',
+        category: 'technical',
+        priority: 'must-say',
+        order: 0,
+      }),
+    );
   });
 
-  it('hides empty state when form is shown', () => {
-    render(<TalkingPointList {...createDefaultProps({ showForm: true })} />);
-    expect(screen.queryByText(/No talking points yet/)).not.toBeInTheDocument();
+  it('shows delete confirmation and calls removeTalkingPoint', async () => {
+    const user = userEvent.setup();
+    const point = makeTalkingPoint({ id: 'tp-1' });
+    render(<TalkingPointList contentId="c1" points={[point]} />);
+
+    // Click the trash icon
+    const deleteButtons = screen.getAllByRole('button');
+    const trashButton = deleteButtons.find(
+      (btn) => btn.querySelector('svg') !== null && btn.className.includes('p-0'),
+    );
+    expect(trashButton).toBeDefined();
+    await user.click(trashButton!);
+
+    expect(screen.getByText('Remove talking point?')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(removeTalkingPointMock).toHaveBeenCalledWith('c1', 'tp-1');
+  });
+
+  it('hides form on Cancel click', async () => {
+    const user = userEvent.setup();
+    render(<TalkingPointList contentId="c1" points={[]} />);
+
+    await user.click(screen.getByText('Add Talking Point'));
+    expect(screen.getByLabelText('Talking Point')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(
+      screen.queryByLabelText('Talking Point'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('sorts points by order', () => {
+    const points = [
+      makeTalkingPoint({ id: 'tp-2', text: 'Second', order: 1 }),
+      makeTalkingPoint({ id: 'tp-1', text: 'First', order: 0 }),
+    ];
+    render(<TalkingPointList contentId="c1" points={points} />);
+
+    const items = screen.getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('First');
+    expect(items[1]).toHaveTextContent('Second');
+  });
+
+  it('renders drag handles for each talking point', () => {
+    render(
+      <TalkingPointList
+        contentId="abc"
+        points={[
+          makeTalkingPoint({ order: 0 }),
+          makeTalkingPoint({ id: 'tp-2', order: 1, text: 'Second point' }),
+        ]}
+      />,
+    );
+
+    const dragHandles = screen.getAllByLabelText('Drag to reorder');
+    expect(dragHandles).toHaveLength(2);
   });
 });

@@ -1,170 +1,161 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import {
-  ContentContext,
-  type ContentContextValue,
-} from '@/features/content/ContentProvider';
 import { StatusTransition } from '@/components/DetailPanel/StatusTransition';
+import { useContent } from '@/features/content/useContent';
+import type { ContentContextValue } from '@/features/content/ContentContext';
 import type { ContentItem } from '@/types/content';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-  db: {},
+vi.mock('@/features/content/useContent');
+vi.mock('@/services/sentry', () => ({
+  captureError: vi.fn(),
 }));
 
-function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
+function makeContentItem(overrides: Partial<ContentItem> = {}): ContentItem {
   return {
-    id: 'item-1',
+    id: 'abc123',
     title: 'Test Video',
     description: '',
     tags: [],
-    status: 'draft',
-    phase: 'pre-production',
+    status: 'recorded',
+    phase: 'production',
     order: 0,
+    contentType: 'video',
+    parentVideoId: null,
+    script: null,
+    platformVersions: [],
     youtubeUrl: null,
     demoItems: [],
     talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
+    shootingScript: null,
+    thumbnailIdeas: null,
     linkedContent: [],
-    notes: '',
+    notes: null,
     learnings: [],
     feedback: [],
     timestamps: {
-      created: '2026-01-01T00:00:00Z',
-      technicallyReady: null,
-      shootingScriptReady: null,
-      readyToRecord: null,
-      recorded: null,
+      created: '2024-01-01',
+      technicallyReady: '2024-01-05',
+      shootingScriptReady: '2024-01-10',
+      readyToRecord: '2024-01-15',
+      recorded: '2024-01-20',
       edited: null,
       published: null,
       shortsExtracted: null,
       lifetimeValueEnds: null,
-      updated: '2026-01-01T00:00:00Z',
+      updated: '2024-01-20',
     },
     ...overrides,
   };
 }
 
-function renderStatusTransition(
-  item: ContentItem,
-  contextOverrides: Partial<ContentContextValue> = {},
-): ReturnType<typeof render> {
-  const defaultContext: ContentContextValue = {
-    contents: [item],
+function mockUseContent(overrides: Partial<ContentContextValue> = {}): ContentContextValue {
+  const value: ContentContextValue = {
+    contents: [],
     loading: false,
     error: null,
     createContent: vi.fn(),
     updateContent: vi.fn(),
     deleteContent: vi.fn(),
     updateStatus: vi.fn().mockResolvedValue(undefined),
-    ...contextOverrides,
+    reorderContents: vi.fn(),
+    ...overrides,
   };
+  vi.mocked(useContent).mockReturnValue(value);
+  return value;
+}
 
+function renderStatusTransition(content: ContentItem) {
   return render(
-    <ContentContext.Provider value={defaultContext}>
-      <MemoryRouter>
-        <StatusTransition item={item} />
-      </MemoryRouter>
-    </ContentContext.Provider>,
+    <MemoryRouter>
+      <StatusTransition content={content} />
+    </MemoryRouter>,
   );
 }
 
 describe('StatusTransition', () => {
-  it('shows current status badge', () => {
-    renderStatusTransition(createMockItem({ status: 'draft' }));
-    expect(screen.getByText('Draft')).toBeInTheDocument();
+  it('shows the current status badge', () => {
+    mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'recorded' }));
+
+    expect(screen.getByTestId('status-badge')).toHaveTextContent('Recorded');
   });
 
-  it('shows advance button with next status label for draft', () => {
-    renderStatusTransition(createMockItem({ status: 'draft' }));
-    expect(screen.getByText('Technically Ready')).toBeInTheDocument();
+  it('shows advance button with next status label', () => {
+    mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'recorded' }));
+
+    const advanceBtn = screen.getByTestId('advance-button');
+    expect(advanceBtn).toHaveTextContent('Edited');
   });
 
-  it('does not show move-back button for draft', () => {
-    renderStatusTransition(createMockItem({ status: 'draft' }));
-    // Only the advance button and status badge should exist
-    expect(screen.queryByRole('button', { name: /chevron-left/i })).not.toBeInTheDocument();
-    // Draft has no previous status, so there should be no button with a previous status label
-    const buttons = screen.getAllByRole('button');
-    // One advance button only
-    expect(buttons).toHaveLength(1);
+  it('shows move-back button with previous status label', () => {
+    mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'recorded' }));
+
+    const backBtn = screen.getByTestId('move-back-button');
+    expect(backBtn).toHaveTextContent('Ready to Record');
   });
 
-  it('shows both buttons for middle status', () => {
-    renderStatusTransition(createMockItem({ status: 'recorded', phase: 'production' }));
-    expect(screen.getByText('Ready to Record')).toBeInTheDocument(); // move back
-    expect(screen.getByText('Edited')).toBeInTheDocument(); // advance
+  it('hides move-back button when status is draft', () => {
+    mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'draft', phase: 'pre-production' }));
+
+    expect(screen.queryByTestId('move-back-button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('advance-button')).toHaveTextContent('Technically Ready');
   });
 
-  it('does not show advance button for lifetime-value-ends', () => {
+  it('hides advance button when status is lifetime-value-ends', () => {
+    mockUseContent();
     renderStatusTransition(
-      createMockItem({ status: 'lifetime-value-ends', phase: 'post-production' }),
+      makeContentItem({ status: 'lifetime-value-ends', phase: 'post-production' }),
     );
-    expect(screen.getByText('Lifetime Value Ends')).toBeInTheDocument(); // status badge
-    expect(screen.getByText('Extracted Shorts')).toBeInTheDocument(); // move back
-    // Only the move-back trigger button should exist
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(1);
+
+    expect(screen.queryByTestId('advance-button')).not.toBeInTheDocument();
+    expect(screen.getByTestId('move-back-button')).toHaveTextContent('Extracted Shorts');
   });
 
   it('calls updateStatus with next status on advance click', async () => {
-    const updateStatus = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
-    renderStatusTransition(createMockItem({ status: 'draft' }), { updateStatus });
+    const ctx = mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'recorded' }));
 
-    await user.click(screen.getByText('Technically Ready'));
+    await user.click(screen.getByTestId('advance-button'));
 
-    expect(updateStatus).toHaveBeenCalledWith('item-1', 'technically-ready');
-  });
-
-  it('shows success indicator after advance', async () => {
-    const updateStatus = vi.fn().mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    renderStatusTransition(createMockItem({ status: 'draft' }), { updateStatus });
-
-    await user.click(screen.getByText('Technically Ready'));
-
-    await waitFor(() => {
-      expect(screen.getByText('Updated')).toBeInTheDocument();
-    });
+    expect(ctx.updateStatus).toHaveBeenCalledWith('abc123', 'edited');
   });
 
   it('shows confirmation dialog on move-back click', async () => {
     const user = userEvent.setup();
-    renderStatusTransition(createMockItem({ status: 'recorded', phase: 'production' }));
+    mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'recorded' }));
 
-    await user.click(screen.getByText('Ready to Record'));
+    await user.click(screen.getByTestId('move-back-button'));
 
     expect(screen.getByText(/Move back to Ready to Record\?/)).toBeInTheDocument();
     expect(screen.getByText(/revert the status/)).toBeInTheDocument();
   });
 
   it('calls updateStatus with previous status on move-back confirm', async () => {
-    const updateStatus = vi.fn().mockResolvedValue(undefined);
     const user = userEvent.setup();
-    renderStatusTransition(
-      createMockItem({ status: 'recorded', phase: 'production' }),
-      { updateStatus },
-    );
+    const ctx = mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'recorded' }));
 
-    await user.click(screen.getByText('Ready to Record'));
-    await user.click(screen.getByText('Move Back'));
+    await user.click(screen.getByTestId('move-back-button'));
+    await user.click(screen.getByRole('button', { name: 'Move back' }));
 
-    expect(updateStatus).toHaveBeenCalledWith('item-1', 'ready-to-record');
+    expect(ctx.updateStatus).toHaveBeenCalledWith('abc123', 'ready-to-record');
   });
 
-  it('shows error message when transition fails', async () => {
-    const updateStatus = vi.fn().mockRejectedValue(new Error('fail'));
+  it('does not call updateStatus when move-back is cancelled', async () => {
     const user = userEvent.setup();
-    renderStatusTransition(createMockItem({ status: 'draft' }), { updateStatus });
+    const ctx = mockUseContent();
+    renderStatusTransition(makeContentItem({ status: 'recorded' }));
 
-    await user.click(screen.getByText('Technically Ready'));
+    await user.click(screen.getByTestId('move-back-button'));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    await waitFor(() => {
-      expect(screen.getByText('Failed to advance status')).toBeInTheDocument();
-    });
+    expect(ctx.updateStatus).not.toHaveBeenCalled();
   });
 });

@@ -1,60 +1,68 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { beforeAll, describe, it, expect, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
-import {
-  ContentContext,
-  type ContentContextValue,
-} from '@/features/content/ContentProvider';
 import { LearningList } from '@/features/learn/LearningList';
+import { useContent } from '@/features/content/useContent';
+import { useLearnings } from '@/features/learn/useLearnings';
 import type { ContentItem, Learning } from '@/types/content';
-import {
-  addLearning,
-  updateLearning,
-  removeLearning,
-} from '@/services/firestore';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-  db: {},
-}));
+vi.mock('@/features/content/useContent');
+vi.mock('@/features/learn/useLearnings');
 
-vi.mock('@/services/firestore', () => ({
-  addLearning: vi.fn().mockResolvedValue(undefined),
-  updateLearning: vi.fn().mockResolvedValue(undefined),
-  removeLearning: vi.fn().mockResolvedValue(undefined),
-}));
+// Radix Select requires these APIs that jsdom doesn't provide
+beforeAll(() => {
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  window.HTMLElement.prototype.hasPointerCapture = vi.fn();
+  window.HTMLElement.prototype.releasePointerCapture = vi.fn();
+  window.HTMLElement.prototype.setPointerCapture = vi.fn();
 
-function createMockLearning(overrides: Partial<Learning> = {}): Learning {
+  // Radix uses ResizeObserver
+  window.ResizeObserver = vi.fn().mockImplementation(() => ({
+    observe: vi.fn(),
+    unobserve: vi.fn(),
+    disconnect: vi.fn(),
+  }));
+});
+
+const mockAdd = vi.fn();
+const mockUpdate = vi.fn();
+const mockRemove = vi.fn();
+const mockNavigate = vi.fn();
+
+function makeLearning(overrides: Partial<Learning> = {}): Learning {
   return {
     id: 'learn-1',
-    text: 'Always test edge cases',
+    text: 'Always test error boundaries',
     dateAdded: '2026-01-15T10:00:00.000Z',
     appliedInContentId: null,
     ...overrides,
   };
 }
 
-function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
+function makeContentItem(overrides: Partial<ContentItem> = {}): ContentItem {
   return {
-    id: 'item-1',
+    id: 'content-1',
     title: 'Test Video',
-    description: 'A test description',
+    description: '',
     tags: [],
     status: 'draft',
     phase: 'pre-production',
     order: 0,
+    contentType: 'video',
+    parentVideoId: null,
+    script: null,
+    platformVersions: [],
     youtubeUrl: null,
     demoItems: [],
     talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
+    shootingScript: null,
+    thumbnailIdeas: null,
     linkedContent: [],
-    notes: '',
+    notes: null,
     learnings: [],
     feedback: [],
     timestamps: {
-      created: '2026-01-01',
+      created: '2026-01-01T00:00:00.000Z',
       technicallyReady: null,
       shootingScriptReady: null,
       readyToRecord: null,
@@ -63,248 +71,351 @@ function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
       published: null,
       shortsExtracted: null,
       lifetimeValueEnds: null,
-      updated: '2026-01-01',
+      updated: '2026-01-01T00:00:00.000Z',
     },
     ...overrides,
   };
 }
 
-function renderLearningList(
-  item: ContentItem,
-  additionalContents: ContentItem[] = [],
-): ReturnType<typeof render> {
-  const contextValue: ContentContextValue = {
-    contents: [item, ...additionalContents],
+function setup(content?: ContentItem, otherContents: ContentItem[] = []) {
+  const contentItem = content ?? makeContentItem();
+  const allContents = [contentItem, ...otherContents];
+
+  vi.mocked(useContent).mockReturnValue({
+    contents: allContents,
     loading: false,
     error: null,
     createContent: vi.fn(),
-    updateContent: vi.fn().mockResolvedValue(undefined),
-    deleteContent: vi.fn().mockResolvedValue(undefined),
+    updateContent: vi.fn(),
+    deleteContent: vi.fn(),
     updateStatus: vi.fn(),
-  };
+    reorderContents: vi.fn(),
+  });
+
+  vi.mocked(useLearnings).mockReturnValue({
+    add: mockAdd,
+    update: mockUpdate,
+    remove: mockRemove,
+  });
 
   return render(
-    <ContentContext.Provider value={contextValue}>
-      <MemoryRouter>
-        <LearningList item={item} />
-      </MemoryRouter>
-    </ContentContext.Provider>,
+    <LearningList content={contentItem} onNavigateToContent={mockNavigate} />,
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockAdd.mockResolvedValue(undefined);
+  mockUpdate.mockResolvedValue(undefined);
+  mockRemove.mockResolvedValue(undefined);
 });
 
 describe('LearningList', () => {
-  it('shows empty state when no learnings', () => {
-    renderLearningList(createMockItem());
-    expect(
-      screen.getByText(
-        'No learnings yet. Capture what you learned while creating this video.',
-      ),
-    ).toBeInTheDocument();
+  describe('empty state', () => {
+    it('shows empty message when no learnings exist', () => {
+      setup();
+
+      expect(screen.getByText('No learnings yet.')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Capture what you learned while creating this video.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('shows Add Learning button in empty state', () => {
+      setup();
+
+      expect(
+        screen.getByRole('button', { name: /add learning/i }),
+      ).toBeInTheDocument();
+    });
   });
 
-  it('renders Add Learning button', () => {
-    renderLearningList(createMockItem());
-    expect(screen.getByText('Add Learning')).toBeInTheDocument();
+  describe('displaying learnings', () => {
+    it('shows learning text and formatted date', () => {
+      const content = makeContentItem({
+        learnings: [makeLearning()],
+      });
+      setup(content);
+
+      expect(
+        screen.getByText('Always test error boundaries'),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Jan 15, 2026')).toBeInTheDocument();
+    });
+
+    it('shows multiple learnings', () => {
+      const content = makeContentItem({
+        learnings: [
+          makeLearning({ id: 'l1', text: 'First learning' }),
+          makeLearning({ id: 'l2', text: 'Second learning' }),
+        ],
+      });
+      setup(content);
+
+      expect(screen.getByText('First learning')).toBeInTheDocument();
+      expect(screen.getByText('Second learning')).toBeInTheDocument();
+    });
   });
 
-  it('shows add form when Add Learning is clicked', async () => {
-    const user = userEvent.setup();
-    renderLearningList(createMockItem());
+  describe('adding a learning', () => {
+    it('shows inline form when Add Learning is clicked', async () => {
+      const user = userEvent.setup();
+      setup();
 
-    await user.click(screen.getByText('Add Learning'));
+      await user.click(
+        screen.getByRole('button', { name: /add learning/i }),
+      );
 
-    expect(
-      screen.getByPlaceholderText('What did you learn?'),
-    ).toBeInTheDocument();
-    expect(screen.getByText('Save')).toBeInTheDocument();
-    expect(screen.getByText('Cancel')).toBeInTheDocument();
+      expect(
+        screen.getByPlaceholderText('What did you learn?'),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Cancel' }),
+      ).toBeInTheDocument();
+    });
+
+    it('calls add with learning data on save', async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await user.click(
+        screen.getByRole('button', { name: /add learning/i }),
+      );
+      await user.type(
+        screen.getByPlaceholderText('What did you learn?'),
+        'New insight about testing',
+      );
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockAdd).toHaveBeenCalledOnce();
+      expect(mockAdd).toHaveBeenCalledWith(
+        'content-1',
+        expect.objectContaining({
+          text: 'New insight about testing',
+          appliedInContentId: null,
+        }),
+      );
+    });
+
+    it('disables save button when text is empty', async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await user.click(
+        screen.getByRole('button', { name: /add learning/i }),
+      );
+
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+
+    it('hides form when cancel is clicked', async () => {
+      const user = userEvent.setup();
+      setup();
+
+      await user.click(
+        screen.getByRole('button', { name: /add learning/i }),
+      );
+      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(
+        screen.queryByPlaceholderText('What did you learn?'),
+      ).not.toBeInTheDocument();
+    });
   });
 
-  it('hides add form when Cancel is clicked', async () => {
-    const user = userEvent.setup();
-    renderLearningList(createMockItem());
+  describe('editing a learning', () => {
+    it('shows edit form when edit button is clicked', async () => {
+      const user = userEvent.setup();
+      const content = makeContentItem({
+        learnings: [makeLearning()],
+      });
+      setup(content);
 
-    await user.click(screen.getByText('Add Learning'));
-    await user.click(screen.getByText('Cancel'));
+      const editButtons = screen.getAllByRole('button');
+      const editButton = editButtons.find(
+        (btn) => btn.querySelector('svg.lucide-pencil') !== null,
+      );
+      expect(editButton).toBeDefined();
+      await user.click(editButton!);
 
-    expect(
-      screen.queryByPlaceholderText('What did you learn?'),
-    ).not.toBeInTheDocument();
-  });
+      // Should show textarea with current text
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveValue('Always test error boundaries');
+    });
 
-  it('calls addLearning when saving a new learning', async () => {
-    const user = userEvent.setup();
-    renderLearningList(createMockItem());
+    it('calls update with new text on save', async () => {
+      const user = userEvent.setup();
+      const learning = makeLearning();
+      const content = makeContentItem({ learnings: [learning] });
+      setup(content);
 
-    await user.click(screen.getByText('Add Learning'));
-    await user.type(
-      screen.getByPlaceholderText('What did you learn?'),
-      'Use mocks sparingly',
-    );
-    await user.click(screen.getByText('Save'));
+      // Click edit button
+      const editButtons = screen.getAllByRole('button');
+      const editButton = editButtons.find(
+        (btn) => btn.querySelector('svg.lucide-pencil') !== null,
+      );
+      await user.click(editButton!);
 
-    expect(addLearning).toHaveBeenCalledWith(
-      'item-1',
-      expect.objectContaining({
-        text: 'Use mocks sparingly',
-        appliedInContentId: null,
-      }),
-    );
-  });
+      // Clear and type new text
+      const textarea = screen.getByRole('textbox');
+      await user.clear(textarea);
+      await user.type(textarea, 'Updated learning text');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
 
-  it('does not call addLearning when text is empty', async () => {
-    const user = userEvent.setup();
-    renderLearningList(createMockItem());
-
-    await user.click(screen.getByText('Add Learning'));
-    await user.click(screen.getByText('Save'));
-
-    expect(addLearning).not.toHaveBeenCalled();
-  });
-
-  it('renders a learning with text and date', () => {
-    const learning = createMockLearning();
-    renderLearningList(createMockItem({ learnings: [learning] }));
-
-    expect(screen.getByText('Always test edge cases')).toBeInTheDocument();
-    expect(screen.getByText('Jan 15, 2026')).toBeInTheDocument();
-  });
-
-  it('shows edit form when edit button is clicked', async () => {
-    const user = userEvent.setup();
-    const learning = createMockLearning();
-    renderLearningList(createMockItem({ learnings: [learning] }));
-
-    await user.click(screen.getByLabelText('Edit learning'));
-
-    const textarea = screen.getByDisplayValue('Always test edge cases');
-    expect(textarea).toBeInTheDocument();
-  });
-
-  it('calls updateLearning when saving an edit', async () => {
-    const user = userEvent.setup();
-    const learning = createMockLearning();
-    renderLearningList(createMockItem({ learnings: [learning] }));
-
-    await user.click(screen.getByLabelText('Edit learning'));
-    const textarea = screen.getByDisplayValue('Always test edge cases');
-    await user.clear(textarea);
-    await user.type(textarea, 'Updated learning text');
-    await user.click(screen.getByText('Save'));
-
-    expect(updateLearning).toHaveBeenCalledWith(
-      'item-1',
-      expect.objectContaining({
-        id: 'learn-1',
+      expect(mockUpdate).toHaveBeenCalledOnce();
+      expect(mockUpdate).toHaveBeenCalledWith('content-1', {
+        ...learning,
         text: 'Updated learning text',
-      }),
-    );
-  });
-
-  it('cancels edit without calling updateLearning', async () => {
-    const user = userEvent.setup();
-    const learning = createMockLearning();
-    renderLearningList(createMockItem({ learnings: [learning] }));
-
-    await user.click(screen.getByLabelText('Edit learning'));
-    await user.click(screen.getByText('Cancel'));
-
-    expect(updateLearning).not.toHaveBeenCalled();
-    expect(screen.getByText('Always test edge cases')).toBeInTheDocument();
-  });
-
-  it('shows delete confirmation dialog', async () => {
-    const user = userEvent.setup();
-    const learning = createMockLearning();
-    renderLearningList(createMockItem({ learnings: [learning] }));
-
-    await user.click(screen.getByLabelText('Delete learning'));
-
-    expect(screen.getByText('Delete this learning?')).toBeInTheDocument();
-    expect(screen.getByText(/permanently remove/)).toBeInTheDocument();
-  });
-
-  it('calls removeLearning when delete is confirmed', async () => {
-    const user = userEvent.setup();
-    const learning = createMockLearning();
-    renderLearningList(createMockItem({ learnings: [learning] }));
-
-    await user.click(screen.getByLabelText('Delete learning'));
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
-
-    expect(removeLearning).toHaveBeenCalledWith('item-1', 'learn-1');
-  });
-
-  it('shows "Applied in" dropdown with other content items', async () => {
-    // Radix Select sets pointer-events: none on inner span
-    const user = userEvent.setup({ pointerEventsCheck: 0 });
-    const learning = createMockLearning();
-    const otherItem = createMockItem({
-      id: 'item-2',
-      title: 'Another Video',
+      });
     });
-    renderLearningList(createMockItem({ learnings: [learning] }), [otherItem]);
-
-    await user.click(screen.getByText('Applied in...'));
-
-    expect(screen.getByText('Another Video')).toBeInTheDocument();
   });
 
-  it('calls updateLearning when "Applied in" is selected', async () => {
-    // Radix Select sets pointer-events: none on inner span
-    const user = userEvent.setup({ pointerEventsCheck: 0 });
-    const learning = createMockLearning();
-    const otherItem = createMockItem({
-      id: 'item-2',
-      title: 'Another Video',
+  describe('deleting a learning', () => {
+    it('shows confirmation dialog before deleting', async () => {
+      const user = userEvent.setup();
+      const content = makeContentItem({
+        learnings: [makeLearning()],
+      });
+      setup(content);
+
+      // Click delete button (trash icon)
+      const deleteButtons = screen.getAllByRole('button');
+      const deleteButton = deleteButtons.find(
+        (btn) => btn.querySelector('svg.lucide-trash2') !== null,
+      );
+      expect(deleteButton).toBeDefined();
+      await user.click(deleteButton!);
+
+      // Confirmation dialog should appear
+      expect(screen.getByText('Delete learning?')).toBeInTheDocument();
+      expect(
+        screen.getByText('This learning will be permanently removed.'),
+      ).toBeInTheDocument();
     });
-    renderLearningList(createMockItem({ learnings: [learning] }), [otherItem]);
 
-    await user.click(screen.getByText('Applied in...'));
-    await user.click(screen.getByText('Another Video'));
+    it('calls remove when confirmed', async () => {
+      const user = userEvent.setup();
+      const content = makeContentItem({
+        learnings: [makeLearning({ id: 'learn-1' })],
+      });
+      setup(content);
 
-    expect(updateLearning).toHaveBeenCalledWith(
-      'item-1',
-      expect.objectContaining({
-        id: 'learn-1',
-        appliedInContentId: 'item-2',
-      }),
-    );
+      // Click delete, then confirm
+      const deleteButtons = screen.getAllByRole('button');
+      const deleteButton = deleteButtons.find(
+        (btn) => btn.querySelector('svg.lucide-trash2') !== null,
+      );
+      await user.click(deleteButton!);
+
+      const dialog = screen.getByRole('alertdialog');
+      await user.click(
+        within(dialog).getByRole('button', { name: 'Delete' }),
+      );
+
+      expect(mockRemove).toHaveBeenCalledOnce();
+      expect(mockRemove).toHaveBeenCalledWith('content-1', 'learn-1');
+    });
   });
 
-  it('shows applied-in link when appliedInContentId is set', () => {
-    const learning = createMockLearning({ appliedInContentId: 'item-2' });
-    const otherItem = createMockItem({
-      id: 'item-2',
-      title: 'Another Video',
+  describe('Applied in dropdown', () => {
+    it('shows other content items in dropdown', async () => {
+      const content = makeContentItem({
+        learnings: [makeLearning()],
+      });
+      const otherContent = makeContentItem({
+        id: 'content-2',
+        title: 'Other Video',
+      });
+      setup(content, [otherContent]);
+
+      // Radix Select requires pointerDown to open
+      const trigger = screen.getByRole('combobox');
+      fireEvent.pointerDown(trigger, {
+        button: 0,
+        ctrlKey: false,
+        pointerType: 'mouse',
+      });
+
+      // Options appear as role="option" in the Radix listbox
+      const options = screen.getAllByRole('option');
+      const optionTexts = options.map((o) => o.textContent);
+      expect(optionTexts).toContain('Not applied');
+      expect(optionTexts).toContain('Other Video');
     });
-    renderLearningList(createMockItem({ learnings: [learning] }), [otherItem]);
 
-    expect(screen.getByText('Applied in:')).toBeInTheDocument();
-    expect(screen.getByText('Another Video')).toBeInTheDocument();
-  });
+    it('calls update when a content item is selected', async () => {
+      const learning = makeLearning();
+      const content = makeContentItem({ learnings: [learning] });
+      const otherContent = makeContentItem({
+        id: 'content-2',
+        title: 'Other Video',
+      });
+      setup(content, [otherContent]);
 
-  it('can clear applied-in link', async () => {
-    const user = userEvent.setup();
-    const learning = createMockLearning({ appliedInContentId: 'item-2' });
-    const otherItem = createMockItem({
-      id: 'item-2',
-      title: 'Another Video',
+      // Open the dropdown
+      const trigger = screen.getByRole('combobox');
+      fireEvent.pointerDown(trigger, {
+        button: 0,
+        ctrlKey: false,
+        pointerType: 'mouse',
+      });
+
+      // Select the option from the listbox
+      const options = screen.getAllByRole('option');
+      const otherVideoOption = options.find(
+        (o) => o.textContent === 'Other Video',
+      );
+      expect(otherVideoOption).toBeDefined();
+      fireEvent.click(otherVideoOption!);
+
+      expect(mockUpdate).toHaveBeenCalledOnce();
+      expect(mockUpdate).toHaveBeenCalledWith('content-1', {
+        ...learning,
+        appliedInContentId: 'content-2',
+      });
     });
-    renderLearningList(createMockItem({ learnings: [learning] }), [otherItem]);
 
-    await user.click(screen.getByLabelText('Remove applied-in link'));
+    it('shows linked content as clickable link', () => {
+      const content = makeContentItem({
+        learnings: [makeLearning({ appliedInContentId: 'content-2' })],
+      });
+      const otherContent = makeContentItem({
+        id: 'content-2',
+        title: 'Other Video',
+      });
+      setup(content, [otherContent]);
 
-    expect(updateLearning).toHaveBeenCalledWith(
-      'item-1',
-      expect.objectContaining({
-        id: 'learn-1',
-        appliedInContentId: null,
-      }),
-    );
+      // "Other Video" appears in both the link button and the select value
+      const matches = screen.getAllByText('Other Video');
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+      // Verify the link button specifically exists
+      const linkButton = matches.find(
+        (el) => el.closest('button[type="button"]') !== null,
+      );
+      expect(linkButton).toBeDefined();
+    });
+
+    it('navigates when Applied in link is clicked', async () => {
+      const user = userEvent.setup();
+      const content = makeContentItem({
+        learnings: [makeLearning({ appliedInContentId: 'content-2' })],
+      });
+      const otherContent = makeContentItem({
+        id: 'content-2',
+        title: 'Linked Video',
+      });
+      setup(content, [otherContent]);
+
+      // Find the link button (has ExternalLink icon)
+      const linkButton = screen.getByRole('button', {
+        name: /linked video/i,
+      });
+      await user.click(linkButton);
+
+      expect(mockNavigate).toHaveBeenCalledWith('content-2');
+    });
   });
 });

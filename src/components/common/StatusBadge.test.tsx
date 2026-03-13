@@ -4,62 +4,51 @@ import { StatusBadge } from '@/components/common/StatusBadge';
 import type { ContentStatus } from '@/types/content';
 
 describe('StatusBadge', () => {
-  const statuses: ContentStatus[] = [
-    'draft',
-    'technically-ready',
-    'shooting-script-ready',
-    'ready-to-record',
-    'recorded',
-    'edited',
-    'published',
-    'extracted-shorts',
-    'lifetime-value-ends',
+  const statusColorPairs: [ContentStatus, string][] = [
+    ['draft', 'bg-blue-100'],
+    ['technically-ready', 'bg-blue-100'],
+    ['shooting-script-ready', 'bg-blue-200'],
+    ['ready-to-record', 'bg-blue-200'],
+    ['recorded', 'bg-amber-100'],
+    ['edited', 'bg-amber-200'],
+    ['published', 'bg-green-100'],
+    ['extracted-shorts', 'bg-green-200'],
+    ['lifetime-value-ends', 'bg-gray-100'],
   ];
 
-  it.each(statuses)('renders label for status "%s"', (status) => {
-    render(<StatusBadge status={status} />);
-    expect(screen.getByText(/./)).toBeInTheDocument();
-  });
+  it.each(statusColorPairs)(
+    'renders correct color class for status "%s"',
+    (status, expectedClass) => {
+      render(<StatusBadge status={status} />);
 
-  it('renders "Draft" for draft status', () => {
+      const badge = screen.getByTestId('status-badge');
+      expect(badge.className).toContain(expectedClass);
+    },
+  );
+
+  it('renders the status label text', () => {
     render(<StatusBadge status="draft" />);
+
     expect(screen.getByText('Draft')).toBeInTheDocument();
   });
 
-  it('renders "Published" for published status', () => {
+  it('renders "Published" label for published status', () => {
     render(<StatusBadge status="published" />);
+
     expect(screen.getByText('Published')).toBeInTheDocument();
   });
 
-  it('applies blue color classes for pre-production statuses', () => {
-    const { container } = render(<StatusBadge status="draft" />);
-    const badge = container.querySelector('span');
-    expect(badge?.className).toContain('bg-blue');
+  it('applies additional className', () => {
+    render(<StatusBadge status="draft" className="shrink-0" />);
+
+    const badge = screen.getByTestId('status-badge');
+    expect(badge.className).toContain('shrink-0');
   });
 
-  it('applies amber color classes for production statuses', () => {
-    const { container } = render(<StatusBadge status="recorded" />);
-    const badge = container.querySelector('span');
-    expect(badge?.className).toContain('bg-amber');
-  });
+  it('sets data-status attribute', () => {
+    render(<StatusBadge status="edited" />);
 
-  it('applies green color classes for post-production statuses', () => {
-    const { container } = render(<StatusBadge status="published" />);
-    const badge = container.querySelector('span');
-    expect(badge?.className).toContain('bg-green');
-  });
-
-  it('applies gray color classes for lifetime-value-ends', () => {
-    const { container } = render(<StatusBadge status="lifetime-value-ends" />);
-    const badge = container.querySelector('span');
-    expect(badge?.className).toContain('bg-gray');
-  });
-
-  it('merges additional className', () => {
-    const { container } = render(
-      <StatusBadge status="draft" className="ml-2" />,
-    );
-    const badge = container.querySelector('span');
-    expect(badge?.className).toContain('ml-2');
+    const badge = screen.getByTestId('status-badge');
+    expect(badge).toHaveAttribute('data-status', 'edited');
   });
 });

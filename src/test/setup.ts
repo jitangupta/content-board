@@ -1,15 +1,23 @@
 import '@testing-library/jest-dom/vitest';
 
-// Polyfill DOM APIs missing in jsdom for Radix UI components
-if (!Element.prototype.hasPointerCapture) {
-  Element.prototype.hasPointerCapture = () => false;
-}
-if (!Element.prototype.setPointerCapture) {
-  Element.prototype.setPointerCapture = () => {};
-}
-if (!Element.prototype.releasePointerCapture) {
-  Element.prototype.releasePointerCapture = () => {};
-}
-if (!Element.prototype.scrollIntoView) {
-  Element.prototype.scrollIntoView = () => {};
-}
+// @dnd-kit requires ResizeObserver which jsdom doesn't provide
+globalThis.ResizeObserver = class ResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+};
+
+// jsdom doesn't provide matchMedia — required by useTheme
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});

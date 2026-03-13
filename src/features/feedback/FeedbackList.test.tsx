@@ -1,72 +1,51 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { FeedbackList } from './FeedbackList';
-import type { ContentItem, Feedback } from '@/types/content';
-import * as firestoreService from '@/services/firestore';
+import { FeedbackList } from '@/features/feedback/FeedbackList';
+import type { Feedback } from '@/types/content';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-  db: {},
+const addFeedbackMock = vi.fn().mockResolvedValue(undefined);
+const updateFeedbackMock = vi.fn().mockResolvedValue(undefined);
+const removeFeedbackMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@/features/feedback/useFeedback', () => ({
+  useFeedback: () => ({
+    addFeedback: addFeedbackMock,
+    updateFeedback: updateFeedbackMock,
+    removeFeedback: removeFeedbackMock,
+  }),
 }));
 
-vi.mock('@/services/firestore', () => ({
-  addFeedback: vi.fn().mockResolvedValue(undefined),
-  updateFeedback: vi.fn().mockResolvedValue(undefined),
-  removeFeedback: vi.fn().mockResolvedValue(undefined),
+vi.mock('@/services/sentry', () => ({
+  captureError: vi.fn(),
 }));
 
-function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
+function makeFeedback(overrides: Partial<Feedback> = {}): Feedback {
   return {
-    id: 'item-1',
-    title: 'Test Video',
-    description: 'A test description',
-    tags: [],
-    status: 'draft',
-    phase: 'pre-production',
-    order: 0,
-    youtubeUrl: null,
-    demoItems: [],
-    talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
-    linkedContent: [],
-    notes: '',
-    learnings: [],
-    feedback: [],
-    timestamps: {
-      created: '2026-01-01',
-      technicallyReady: null,
-      shootingScriptReady: null,
-      readyToRecord: null,
-      recorded: null,
-      edited: null,
-      published: null,
-      shortsExtracted: null,
-      lifetimeValueEnds: null,
-      updated: '2026-01-01',
-    },
+    id: 'fb-1',
+    source: 'self',
+    text: 'Good pacing throughout',
+    dateAdded: '2026-01-15T12:00:00.000Z',
     ...overrides,
   };
 }
 
-function createMockFeedback(overrides: Partial<Feedback> = {}): Feedback {
-  return {
-    id: 'fb-1',
-    source: 'self',
-    text: 'Great pacing in this video',
-    dateAdded: '2026-01-15T00:00:00.000Z',
-    ...overrides,
-  };
+function renderFeedbackList(feedback: Feedback[] = []) {
+  return render(
+    <FeedbackList contentId="abc123" feedback={feedback} />,
+  );
 }
 
 describe('FeedbackList', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    addFeedbackMock.mockClear();
+    updateFeedbackMock.mockClear();
+    removeFeedbackMock.mockClear();
   });
 
-  it('shows empty state when no feedback exists', () => {
-    render(<FeedbackList item={createMockItem()} />);
+  it('shows empty state when no feedback', () => {
+    renderFeedbackList();
+
     expect(
       screen.getByText(
         'No feedback yet. Collect feedback from yourself, peers, or viewers.',
@@ -74,214 +53,177 @@ describe('FeedbackList', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders feedback items with source badge, text, and date', () => {
-    const item = createMockItem({
-      feedback: [createMockFeedback()],
-    });
-    render(<FeedbackList item={item} />);
+  it('renders feedback items with source badge and date', () => {
+    const items = [
+      makeFeedback(),
+      makeFeedback({
+        id: 'fb-2',
+        source: 'peer',
+        text: 'Needs better intro',
+        dateAdded: '2026-02-10T12:00:00.000Z',
+      }),
+    ];
+    renderFeedbackList(items);
 
-    expect(screen.getByText('self')).toBeInTheDocument();
-    expect(screen.getByText('Great pacing in this video')).toBeInTheDocument();
+    expect(screen.getByText('Good pacing throughout')).toBeInTheDocument();
+    expect(screen.getByText('Needs better intro')).toBeInTheDocument();
+    expect(screen.getByText('Self')).toBeInTheDocument();
+    expect(screen.getByText('Peer')).toBeInTheDocument();
     expect(screen.getByText('Jan 15, 2026')).toBeInTheDocument();
+    expect(screen.getByText('Feb 10, 2026')).toBeInTheDocument();
   });
 
-  it('renders Add Feedback button', () => {
-    render(<FeedbackList item={createMockItem()} />);
-    expect(screen.getByText('Add Feedback')).toBeInTheDocument();
+  it('shows source badges with correct colors', () => {
+    const items = [
+      makeFeedback({ id: 'fb-1', source: 'self' }),
+      makeFeedback({ id: 'fb-2', source: 'peer' }),
+      makeFeedback({ id: 'fb-3', source: 'family' }),
+      makeFeedback({ id: 'fb-4', source: 'comment' }),
+    ];
+    renderFeedbackList(items);
+
+    const selfBadge = screen.getByTestId('source-badge-self');
+    const peerBadge = screen.getByTestId('source-badge-peer');
+    const familyBadge = screen.getByTestId('source-badge-family');
+    const commentBadge = screen.getByTestId('source-badge-comment');
+
+    expect(selfBadge.className).toContain('bg-blue-100');
+    expect(peerBadge.className).toContain('bg-purple-100');
+    expect(familyBadge.className).toContain('bg-green-100');
+    expect(commentBadge.className).toContain('bg-orange-100');
   });
 
   it('shows add form when Add Feedback is clicked', async () => {
     const user = userEvent.setup();
-    render(<FeedbackList item={createMockItem()} />);
+    renderFeedbackList();
 
     await user.click(screen.getByText('Add Feedback'));
 
-    expect(screen.getByPlaceholderText('Enter feedback...')).toBeInTheDocument();
+    expect(screen.getByLabelText('Source')).toBeInTheDocument();
+    expect(screen.getByLabelText('Feedback')).toBeInTheDocument();
     expect(screen.getByText('Add')).toBeInTheDocument();
     expect(screen.getByText('Cancel')).toBeInTheDocument();
   });
 
   it('adds feedback with source and text', async () => {
     const user = userEvent.setup();
-    render(<FeedbackList item={createMockItem()} />);
+    renderFeedbackList();
 
     await user.click(screen.getByText('Add Feedback'));
     await user.type(
-      screen.getByPlaceholderText('Enter feedback...'),
-      'Needs better intro',
+      screen.getByLabelText('Feedback'),
+      'Great thumbnail',
     );
     await user.click(screen.getByText('Add'));
 
-    expect(firestoreService.addFeedback).toHaveBeenCalledWith(
-      'item-1',
-      expect.objectContaining({
-        source: 'self',
-        text: 'Needs better intro',
-      }),
+    expect(addFeedbackMock).toHaveBeenCalledWith(
+      'abc123',
+      'self',
+      'Great thumbnail',
     );
   });
 
   it('does not add feedback with empty text', async () => {
     const user = userEvent.setup();
-    render(<FeedbackList item={createMockItem()} />);
+    renderFeedbackList();
 
     await user.click(screen.getByText('Add Feedback'));
     await user.click(screen.getByText('Add'));
 
-    expect(firestoreService.addFeedback).not.toHaveBeenCalled();
+    expect(addFeedbackMock).not.toHaveBeenCalled();
   });
 
-  it('hides form and resets on cancel', async () => {
+  it('hides add form on cancel', async () => {
     const user = userEvent.setup();
-    render(<FeedbackList item={createMockItem()} />);
+    renderFeedbackList();
 
     await user.click(screen.getByText('Add Feedback'));
-    await user.type(
-      screen.getByPlaceholderText('Enter feedback...'),
-      'Some text',
-    );
-    await user.click(screen.getByText('Cancel'));
+    expect(screen.getByLabelText('Feedback')).toBeInTheDocument();
 
-    expect(
-      screen.queryByPlaceholderText('Enter feedback...'),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText('Add Feedback')).toBeInTheDocument();
+    await user.click(screen.getByText('Cancel'));
+    expect(screen.queryByLabelText('Feedback')).not.toBeInTheDocument();
   });
 
   it('enters edit mode when edit button is clicked', async () => {
     const user = userEvent.setup();
-    const item = createMockItem({
-      feedback: [createMockFeedback()],
-    });
-    render(<FeedbackList item={item} />);
+    const item = makeFeedback();
+    renderFeedbackList([item]);
 
-    await user.click(screen.getByLabelText('Edit feedback'));
+    // Click the edit button (pencil icon)
+    const editButtons = screen.getAllByRole('button');
+    const editButton = editButtons.find(
+      (btn) => btn.querySelector('svg.lucide-pencil') !== null,
+    );
+    expect(editButton).toBeDefined();
+    await user.click(editButton!);
 
-    expect(screen.getByDisplayValue('Great pacing in this video')).toBeInTheDocument();
+    // Should show edit form with current values
+    expect(screen.getByLabelText('Feedback')).toHaveValue(
+      'Good pacing throughout',
+    );
     expect(screen.getByText('Save')).toBeInTheDocument();
   });
 
   it('saves edited feedback', async () => {
     const user = userEvent.setup();
-    const fb = createMockFeedback();
-    const item = createMockItem({ feedback: [fb] });
-    render(<FeedbackList item={item} />);
+    const item = makeFeedback();
+    renderFeedbackList([item]);
 
-    await user.click(screen.getByLabelText('Edit feedback'));
-    const textarea = screen.getByDisplayValue('Great pacing in this video');
+    // Enter edit mode
+    const editButtons = screen.getAllByRole('button');
+    const editButton = editButtons.find(
+      (btn) => btn.querySelector('svg.lucide-pencil') !== null,
+    );
+    await user.click(editButton!);
+
+    // Change text
+    const textarea = screen.getByLabelText('Feedback');
     await user.clear(textarea);
-    await user.type(textarea, 'Updated feedback text');
+    await user.type(textarea, 'Updated feedback');
     await user.click(screen.getByText('Save'));
 
-    expect(firestoreService.updateFeedback).toHaveBeenCalledWith(
-      'item-1',
-      expect.objectContaining({
-        id: 'fb-1',
-        text: 'Updated feedback text',
-        source: 'self',
-      }),
-    );
+    expect(updateFeedbackMock).toHaveBeenCalledWith('abc123', {
+      ...item,
+      text: 'Updated feedback',
+    });
   });
 
   it('cancels editing without saving', async () => {
     const user = userEvent.setup();
-    const item = createMockItem({
-      feedback: [createMockFeedback()],
-    });
-    render(<FeedbackList item={item} />);
+    const item = makeFeedback();
+    renderFeedbackList([item]);
 
-    await user.click(screen.getByLabelText('Edit feedback'));
-    // Click the Cancel button (in edit form, not add form)
-    const cancelButtons = screen.getAllByText('Cancel');
-    await user.click(cancelButtons[cancelButtons.length - 1]);
+    // Enter edit mode
+    const editButtons = screen.getAllByRole('button');
+    const editButton = editButtons.find(
+      (btn) => btn.querySelector('svg.lucide-pencil') !== null,
+    );
+    await user.click(editButton!);
 
-    expect(firestoreService.updateFeedback).not.toHaveBeenCalled();
-    expect(screen.getByText('Great pacing in this video')).toBeInTheDocument();
-  });
+    // Cancel
+    await user.click(screen.getByText('Cancel'));
 
-  it('shows delete confirmation dialog', async () => {
-    const user = userEvent.setup();
-    const item = createMockItem({
-      feedback: [createMockFeedback()],
-    });
-    render(<FeedbackList item={item} />);
-
-    await user.click(screen.getByLabelText('Delete feedback'));
-
-    expect(screen.getByText('Delete feedback?')).toBeInTheDocument();
-    expect(screen.getByText(/permanently remove/)).toBeInTheDocument();
+    expect(updateFeedbackMock).not.toHaveBeenCalled();
+    // Should show the original text again
+    expect(screen.getByText('Good pacing throughout')).toBeInTheDocument();
   });
 
   it('deletes feedback after confirmation', async () => {
     const user = userEvent.setup();
-    const item = createMockItem({
-      feedback: [createMockFeedback()],
-    });
-    render(<FeedbackList item={item} />);
+    const item = makeFeedback();
+    renderFeedbackList([item]);
 
-    await user.click(screen.getByLabelText('Delete feedback'));
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
-
-    expect(firestoreService.removeFeedback).toHaveBeenCalledWith(
-      'item-1',
-      'fb-1',
+    // Click delete button (trash icon)
+    const deleteButtons = screen.getAllByRole('button');
+    const deleteButton = deleteButtons.find(
+      (btn) => btn.querySelector('svg.lucide-trash-2') !== null,
     );
-  });
+    expect(deleteButton).toBeDefined();
+    await user.click(deleteButton!);
 
-  describe('source badge colors', () => {
-    it('renders self badge with blue color', () => {
-      const item = createMockItem({
-        feedback: [createMockFeedback({ source: 'self' })],
-      });
-      render(<FeedbackList item={item} />);
-      const badge = screen.getByTestId('source-badge-self');
-      expect(badge.className).toContain('bg-blue-100');
-      expect(badge.className).toContain('text-blue-700');
-    });
+    // Confirm in the alert dialog
+    await user.click(screen.getByText('Delete'));
 
-    it('renders peer badge with purple color', () => {
-      const item = createMockItem({
-        feedback: [createMockFeedback({ source: 'peer', id: 'fb-2' })],
-      });
-      render(<FeedbackList item={item} />);
-      const badge = screen.getByTestId('source-badge-peer');
-      expect(badge.className).toContain('bg-purple-100');
-      expect(badge.className).toContain('text-purple-700');
-    });
-
-    it('renders family badge with green color', () => {
-      const item = createMockItem({
-        feedback: [createMockFeedback({ source: 'family', id: 'fb-3' })],
-      });
-      render(<FeedbackList item={item} />);
-      const badge = screen.getByTestId('source-badge-family');
-      expect(badge.className).toContain('bg-green-100');
-      expect(badge.className).toContain('text-green-700');
-    });
-
-    it('renders comment badge with orange color', () => {
-      const item = createMockItem({
-        feedback: [createMockFeedback({ source: 'comment', id: 'fb-4' })],
-      });
-      render(<FeedbackList item={item} />);
-      const badge = screen.getByTestId('source-badge-comment');
-      expect(badge.className).toContain('bg-orange-100');
-      expect(badge.className).toContain('text-orange-700');
-    });
-  });
-
-  it('renders multiple feedback items', () => {
-    const item = createMockItem({
-      feedback: [
-        createMockFeedback({ id: 'fb-1', source: 'self', text: 'First feedback' }),
-        createMockFeedback({ id: 'fb-2', source: 'peer', text: 'Second feedback' }),
-        createMockFeedback({ id: 'fb-3', source: 'family', text: 'Third feedback' }),
-      ],
-    });
-    render(<FeedbackList item={item} />);
-
-    expect(screen.getByText('First feedback')).toBeInTheDocument();
-    expect(screen.getByText('Second feedback')).toBeInTheDocument();
-    expect(screen.getByText('Third feedback')).toBeInTheDocument();
+    expect(removeFeedbackMock).toHaveBeenCalledWith('abc123', 'fb-1');
   });
 });

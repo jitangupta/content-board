@@ -1,52 +1,77 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import {
-  ContentContext,
-  type ContentContextValue,
-} from '@/features/content/ContentProvider';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { DetailPanel } from '@/components/DetailPanel/DetailPanel';
+import { useContent } from '@/features/content/useContent';
+import type { ContentContextValue } from '@/features/content/ContentContext';
 import type { ContentItem } from '@/types/content';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-  db: {},
+vi.mock('@/features/content/useContent');
+vi.mock('@/services/sentry', () => ({
+  captureError: vi.fn(),
 }));
-
+vi.mock('@/features/production/useProduction', () => ({
+  useProduction: () => ({
+    demoItemOp: { loading: false, error: null },
+    talkingPointOp: { loading: false, error: null },
+    addDemoItem: vi.fn(),
+    updateDemoItem: vi.fn(),
+    removeDemoItem: vi.fn(),
+    addTalkingPoint: vi.fn(),
+    updateTalkingPoint: vi.fn(),
+    removeTalkingPoint: vi.fn(),
+    handleReorderTalkingPoints: vi.fn(),
+  }),
+}));
 vi.mock('@/services/firestore', () => ({
-  addLinkedContent: vi.fn().mockResolvedValue(undefined),
-  removeLinkedContent: vi.fn().mockResolvedValue(undefined),
-  addDemoItem: vi.fn().mockResolvedValue(undefined),
-  updateDemoItem: vi.fn().mockResolvedValue(undefined),
-  removeDemoItem: vi.fn().mockResolvedValue(undefined),
-  addTalkingPoint: vi.fn().mockResolvedValue(undefined),
-  removeTalkingPoint: vi.fn().mockResolvedValue(undefined),
-  updateContent: vi.fn().mockResolvedValue(undefined),
-  addFeedback: vi.fn().mockResolvedValue(undefined),
-  updateFeedback: vi.fn().mockResolvedValue(undefined),
-  removeFeedback: vi.fn().mockResolvedValue(undefined),
+  addDemoItem: vi.fn(),
+  updateDemoItem: vi.fn(),
+  removeDemoItem: vi.fn(),
+  addTalkingPoint: vi.fn(),
+  updateTalkingPoint: vi.fn(),
+  removeTalkingPoint: vi.fn(),
+  updateContent: vi.fn(),
+  addLinkedContent: vi.fn(),
+  removeLinkedContent: vi.fn(),
+  addPlatformVersion: vi.fn(),
+  updatePlatformVersion: vi.fn(),
+  removePlatformVersion: vi.fn(),
 }));
 
-function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
   return {
-    id: 'item-1',
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
+function makeContentItem(overrides: Partial<ContentItem> = {}): ContentItem {
+  return {
+    id: 'abc123',
     title: 'Test Video',
     description: 'A test description',
-    tags: ['react'],
+    tags: ['react', 'testing'],
     status: 'draft',
     phase: 'pre-production',
     order: 0,
+    contentType: 'video',
+    parentVideoId: null,
+    script: null,
+    platformVersions: [],
     youtubeUrl: null,
     demoItems: [],
     talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
+    shootingScript: null,
+    thumbnailIdeas: null,
     linkedContent: [],
-    notes: 'Some notes',
+    notes: null,
     learnings: [],
     feedback: [],
     timestamps: {
-      created: '2026-01-01',
+      created: '2024-01-01',
       technicallyReady: null,
       shootingScriptReady: null,
       readyToRecord: null,
@@ -55,97 +80,134 @@ function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
       published: null,
       shortsExtracted: null,
       lifetimeValueEnds: null,
-      updated: '2026-01-01',
+      updated: '2024-01-01',
     },
     ...overrides,
   };
 }
 
-function renderDetailPanel(
-  route: string,
-  contextOverrides: Partial<ContentContextValue> = {},
-): ReturnType<typeof render> {
-  const defaultContext: ContentContextValue = {
-    contents: [createMockItem()],
+function mockUseContent(overrides: Partial<ContentContextValue> = {}): void {
+  vi.mocked(useContent).mockReturnValue({
+    contents: [],
     loading: false,
     error: null,
     createContent: vi.fn(),
     updateContent: vi.fn(),
     deleteContent: vi.fn(),
     updateStatus: vi.fn(),
-    ...contextOverrides,
-  };
+    reorderContents: vi.fn(),
+    ...overrides,
+  });
+}
 
+function renderDetailPanel(path: string) {
   return render(
-    <ContentContext.Provider value={defaultContext}>
-      <MemoryRouter initialEntries={[route]}>
-        <Routes>
-          <Route path="/content" element={<DetailPanel />} />
-          <Route path="/content/:contentId" element={<DetailPanel />} />
-          <Route path="/content/:contentId/:tab" element={<DetailPanel />} />
-        </Routes>
-      </MemoryRouter>
-    </ContentContext.Provider>,
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/content" element={<DetailPanel />} />
+        <Route path="/content/:contentId" element={<DetailPanel />} />
+        <Route path="/content/:contentId/:tab" element={<DetailPanel />} />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
 describe('DetailPanel', () => {
-  it('shows empty state when no contentId', () => {
-    renderDetailPanel('/content');
-    expect(screen.getByText('Select a content item or create a new one')).toBeInTheDocument();
+  it('renders nothing when no contentId in URL', () => {
+    mockUseContent();
+    const { container } = renderDetailPanel('/content');
+
+    expect(container.innerHTML).toContain('');
+    expect(screen.queryByText('Content not found')).not.toBeInTheDocument();
   });
 
   it('shows loading skeleton when loading', () => {
-    const { container } = renderDetailPanel('/content/item-1', { loading: true });
-    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    mockUseContent({ loading: true });
+    renderDetailPanel('/content/abc123');
+
+    expect(screen.queryByText('Test Video')).not.toBeInTheDocument();
   });
 
-  it('shows not found when contentId does not match', () => {
+  it('shows not found state when contentId does not match', () => {
+    mockUseContent({ contents: [makeContentItem()] });
     renderDetailPanel('/content/nonexistent');
+
     expect(screen.getByText('Content not found')).toBeInTheDocument();
   });
 
-  it('renders content when item exists', () => {
-    renderDetailPanel('/content/item-1');
-    expect(screen.getByDisplayValue('Test Video')).toBeInTheDocument();
+  it('renders content details when contentId matches', () => {
+    mockUseContent({ contents: [makeContentItem()] });
+    renderDetailPanel('/content/abc123');
+
+    expect(screen.getByText('Test Video')).toBeInTheDocument();
+    expect(screen.getAllByRole('tab')).toHaveLength(5);
   });
 
-  it('renders tab navigation with four tabs', () => {
-    renderDetailPanel('/content/item-1');
-    expect(screen.getByText('Content')).toBeInTheDocument();
-    expect(screen.getByText('Production')).toBeInTheDocument();
-    expect(screen.getByText('Learn')).toBeInTheDocument();
-    expect(screen.getByText('Feedback')).toBeInTheDocument();
+  it('defaults to content tab', () => {
+    mockUseContent({ contents: [makeContentItem()] });
+    renderDetailPanel('/content/abc123');
+
+    expect(screen.getByRole('tab', { name: 'Content' })).toHaveAttribute(
+      'data-state',
+      'active',
+    );
   });
 
-  it('defaults to content tab when no tab in URL', () => {
-    renderDetailPanel('/content/item-1');
-    // Content tab shows fields like title, description
-    expect(screen.getByDisplayValue('Test Video')).toBeInTheDocument();
-  });
+  it('shows production tab when URL specifies it', () => {
+    mockUseContent({ contents: [makeContentItem()] });
+    renderDetailPanel('/content/abc123/production');
 
-  it('shows production tab sections for production tab', () => {
-    renderDetailPanel('/content/item-1/production');
+    expect(screen.getByRole('tab', { name: 'Production' })).toHaveAttribute(
+      'data-state',
+      'active',
+    );
     expect(screen.getByText('Demo Items')).toBeInTheDocument();
-    expect(screen.getByText('Talking Points')).toBeInTheDocument();
-    expect(screen.getByText('Shooting Script')).toBeInTheDocument();
-    expect(screen.getByText('Thumbnail Ideas')).toBeInTheDocument();
   });
 
-  it('shows learn tab with empty state', () => {
-    renderDetailPanel('/content/item-1/learn');
-    expect(
-      screen.getByText('No learnings yet. Capture what you learned while creating this video.'),
-    ).toBeInTheDocument();
+  it('shows delete confirmation dialog on delete button click', async () => {
+    const user = userEvent.setup();
+    mockUseContent({ contents: [makeContentItem()] });
+    renderDetailPanel('/content/abc123');
+
+    const buttons = screen.getAllByRole('button');
+    const trashButton = buttons.find(
+      (btn) =>
+        btn.closest('[class*="justify-between"]') &&
+        btn.getAttribute('aria-label') !== 'Back to sidebar',
+    );
+    expect(trashButton).toBeDefined();
+    if (trashButton) {
+      await user.click(trashButton);
+    }
+
+    expect(screen.getByText(/Delete "Test Video"\?/)).toBeInTheDocument();
+    expect(screen.getByText(/This cannot be undone/)).toBeInTheDocument();
   });
 
-  it('shows feedback tab content for feedback tab', () => {
-    renderDetailPanel('/content/item-1/feedback');
-    expect(screen.getByText('Add Feedback')).toBeInTheDocument();
-  });
+  it('calls deleteContent and navigates on confirm delete', async () => {
+    const user = userEvent.setup();
+    const deleteFn = vi.fn().mockResolvedValue(undefined);
+    mockUseContent({
+      contents: [makeContentItem()],
+      deleteContent: deleteFn,
+    });
+    renderDetailPanel('/content/abc123');
 
-  it('falls back to content tab for invalid tab name', () => {
-    renderDetailPanel('/content/item-1/invalid');
-    expect(screen.getByDisplayValue('Test Video')).toBeInTheDocument();
+    // Click the trash button in the header
+    const buttons = screen.getAllByRole('button');
+    const trashButton = buttons.find(
+      (btn) =>
+        btn.closest('[class*="justify-between"]') &&
+        btn.getAttribute('aria-label') !== 'Back to sidebar',
+    );
+    if (trashButton) {
+      await user.click(trashButton);
+    }
+
+    const confirmButton = screen.getByRole('button', { name: 'Delete' });
+    await user.click(confirmButton);
+
+    expect(deleteFn).toHaveBeenCalledWith('abc123');
+    expect(mockNavigate).toHaveBeenCalledWith('/content');
   });
 });

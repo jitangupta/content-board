@@ -1,34 +1,33 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import {
-  ContentContext,
-  type ContentContextValue,
-} from '@/features/content/ContentProvider';
 import { Sidebar } from '@/components/Sidebar/Sidebar';
+import { useContent } from '@/features/content/useContent';
+import type { ContentContextValue } from '@/features/content/ContentContext';
 import type { ContentItem } from '@/types/content';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-  db: {},
-}));
+vi.mock('@/features/content/useContent');
 
-function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
+function makeItem(overrides: Partial<ContentItem>): ContentItem {
   return {
-    id: 'item-1',
+    id: '1',
     title: 'Test Video',
     description: '',
     tags: [],
     status: 'draft',
     phase: 'pre-production',
     order: 0,
+    contentType: 'video',
+    parentVideoId: null,
+    script: null,
+    platformVersions: [],
     youtubeUrl: null,
     demoItems: [],
     talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
+    shootingScript: null,
+    thumbnailIdeas: null,
     linkedContent: [],
-    notes: '',
+    notes: null,
     learnings: [],
     feedback: [],
     timestamps: {
@@ -47,10 +46,8 @@ function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
   };
 }
 
-function renderSidebar(
-  contextOverrides: Partial<ContentContextValue> = {},
-): ReturnType<typeof render> {
-  const defaultContext: ContentContextValue = {
+function mockUseContent(overrides: Partial<ContentContextValue>): void {
+  vi.mocked(useContent).mockReturnValue({
     contents: [],
     loading: false,
     error: null,
@@ -58,41 +55,55 @@ function renderSidebar(
     updateContent: vi.fn(),
     deleteContent: vi.fn(),
     updateStatus: vi.fn(),
-    ...contextOverrides,
-  };
+    reorderContents: vi.fn(),
+    ...overrides,
+  });
+}
 
+function renderSidebar() {
   return render(
-    <ContentContext.Provider value={defaultContext}>
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>
-    </ContentContext.Provider>,
+    <MemoryRouter>
+      <Sidebar />
+    </MemoryRouter>,
   );
 }
 
 describe('Sidebar', () => {
   it('shows skeleton when loading', () => {
-    const { container } = renderSidebar({ loading: true });
-    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
+    mockUseContent({ loading: true });
+
+    renderSidebar();
+
+    expect(screen.getByTestId('sidebar-skeleton')).toBeInTheDocument();
   });
 
-  it('shows error message when error exists', () => {
-    renderSidebar({ error: 'Failed to load' });
-    expect(screen.getByText('Failed to load')).toBeInTheDocument();
-  });
+  it('shows empty state when no content exists', () => {
+    mockUseContent({ contents: [] });
 
-  it('shows empty state when no content', () => {
-    renderSidebar({ contents: [] });
+    renderSidebar();
+
+    expect(screen.getByTestId('sidebar-empty')).toBeInTheDocument();
     expect(screen.getByText('No content yet')).toBeInTheDocument();
+    expect(
+      screen.getByText('Click "+ New Content" to get started'),
+    ).toBeInTheDocument();
   });
 
-  it('renders all three phase groups', () => {
-    const contents = [
-      createMockItem({ id: '1', phase: 'pre-production', status: 'draft' }),
-      createMockItem({ id: '2', phase: 'production', status: 'recorded' }),
-      createMockItem({ id: '3', phase: 'post-production', status: 'published' }),
-    ];
-    renderSidebar({ contents });
+  it('shows error state', () => {
+    mockUseContent({ error: 'Failed to load content' });
+
+    renderSidebar();
+
+    expect(screen.getByTestId('sidebar-error')).toBeInTheDocument();
+    expect(screen.getByText('Failed to load content')).toBeInTheDocument();
+  });
+
+  it('renders three phase groups', () => {
+    mockUseContent({
+      contents: [makeItem({ id: '1', status: 'draft' })],
+    });
+
+    renderSidebar();
 
     expect(screen.getByText('Pre-Production')).toBeInTheDocument();
     expect(screen.getByText('Production')).toBeInTheDocument();
@@ -100,29 +111,44 @@ describe('Sidebar', () => {
   });
 
   it('groups items under the correct phase', () => {
-    const contents = [
-      createMockItem({ id: '1', title: 'Draft Video', phase: 'pre-production', status: 'draft' }),
-      createMockItem({ id: '2', title: 'Recording', phase: 'production', status: 'recorded' }),
-      createMockItem({ id: '3', title: 'Published Video', phase: 'post-production', status: 'published' }),
-    ];
-    renderSidebar({ contents });
+    mockUseContent({
+      contents: [
+        makeItem({ id: '1', title: 'Draft Video', status: 'draft' }),
+        makeItem({ id: '2', title: 'Recorded Video', status: 'recorded' }),
+        makeItem({ id: '3', title: 'Published Video', status: 'published' }),
+      ],
+    });
 
+    renderSidebar();
+
+    // All three items should be rendered
     expect(screen.getByText('Draft Video')).toBeInTheDocument();
-    expect(screen.getByText('Recording')).toBeInTheDocument();
+    expect(screen.getByText('Recorded Video')).toBeInTheDocument();
     expect(screen.getByText('Published Video')).toBeInTheDocument();
+
+    // The count badges should show 1 for each phase
+    const preGroup = screen.getByTestId('phase-group-pre-production');
+    expect(preGroup).toHaveTextContent('1');
+
+    const prodGroup = screen.getByTestId('phase-group-production');
+    expect(prodGroup).toHaveTextContent('1');
+
+    const postGroup = screen.getByTestId('phase-group-post-production');
+    expect(postGroup).toHaveTextContent('1');
   });
 
-  it('shows correct count per phase group', () => {
-    const contents = [
-      createMockItem({ id: '1', phase: 'pre-production', status: 'draft' }),
-      createMockItem({ id: '2', phase: 'pre-production', status: 'technically-ready' }),
-      createMockItem({ id: '3', phase: 'production', status: 'recorded' }),
-    ];
-    renderSidebar({ contents });
+  it('shows correct count for multiple items in a phase', () => {
+    mockUseContent({
+      contents: [
+        makeItem({ id: '1', title: 'Video 1', status: 'draft' }),
+        makeItem({ id: '2', title: 'Video 2', status: 'technically-ready' }),
+        makeItem({ id: '3', title: 'Video 3', status: 'ready-to-record' }),
+      ],
+    });
 
-    // Pre-Production should show 2, Production 1, Post-Production 0
-    expect(screen.getByText('2')).toBeInTheDocument();
-    expect(screen.getByText('1')).toBeInTheDocument();
-    expect(screen.getByText('0')).toBeInTheDocument();
+    renderSidebar();
+
+    const preGroup = screen.getByTestId('phase-group-pre-production');
+    expect(preGroup).toHaveTextContent('3');
   });
 });

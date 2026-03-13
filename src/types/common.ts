@@ -1,4 +1,4 @@
-import type { ContentItem } from './content.ts';
+import type { ContentItem } from '@/types/content';
 
 export interface DataState<T> {
   data: T;

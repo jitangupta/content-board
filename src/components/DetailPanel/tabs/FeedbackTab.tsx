@@ -1,14 +1,14 @@
-import type { ContentItem } from '@/types/content';
 import { FeedbackList } from '@/features/feedback/FeedbackList';
+import type { ContentItem } from '@/types/content';
 
 interface FeedbackTabProps {
-  item: ContentItem;
+  content: ContentItem;
 }
 
-export function FeedbackTab({ item }: FeedbackTabProps) {
+export function FeedbackTab({ content }: FeedbackTabProps) {
   return (
-    <div className="p-6">
-      <FeedbackList item={item} />
+    <div className="space-y-4 pt-4">
+      <FeedbackList contentId={content.id} feedback={content.feedback} />
     </div>
   );
 }

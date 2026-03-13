@@ -1,17 +1,18 @@
 # Dependencies
 node_modules
 
-# Build output
+# Build
 dist
 
-# Environment files
-.env.local
-.env.*.local
+# Environment
+.env
+.env.*
+!.env.example
 
 # Firebase
 .firebase
 
-# Test coverage
+# Testing
 coverage
 
 # IDE
@@ -20,10 +21,9 @@ coverage
 *.swp
 *.swo
 
-# OS files
+# OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
+# Debug
 npm-debug.log*

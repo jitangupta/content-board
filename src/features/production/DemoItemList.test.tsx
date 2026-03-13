@@ -1,125 +1,143 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { DemoItemList } from './DemoItemList';
-import type { DemoItem, DemoItemType } from '@/types/content';
+import { DemoItemList } from '@/features/production/DemoItemList';
+import type { DemoItem } from '@/types/content';
 
-function createDefaultProps(overrides: Record<string, unknown> = {}) {
+const addDemoItemMock = vi.fn().mockResolvedValue(undefined);
+const updateDemoItemMock = vi.fn().mockResolvedValue(undefined);
+const removeDemoItemMock = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@/features/production/useProduction', () => ({
+  useProduction: () => ({
+    demoItemOp: { loading: false, error: null },
+    talkingPointOp: { loading: false, error: null },
+    addDemoItem: addDemoItemMock,
+    updateDemoItem: updateDemoItemMock,
+    removeDemoItem: removeDemoItemMock,
+    addTalkingPoint: vi.fn(),
+    updateTalkingPoint: vi.fn(),
+    removeTalkingPoint: vi.fn(),
+    handleReorderTalkingPoints: vi.fn(),
+  }),
+}));
+
+vi.mock('@/services/sentry', () => ({
+  captureError: vi.fn(),
+}));
+
+function makeDemoItem(overrides: Partial<DemoItem> = {}): DemoItem {
   return {
-    items: [] as DemoItem[],
-    showForm: false,
-    setShowForm: vi.fn(),
-    demoType: 'repo' as DemoItemType,
-    setDemoType: vi.fn(),
-    demoDescription: '',
-    setDemoDescription: vi.fn(),
-    demoError: '',
-    onAdd: vi.fn().mockResolvedValue(undefined),
-    onToggleVerified: vi.fn().mockResolvedValue(undefined),
-    onRemove: vi.fn().mockResolvedValue(undefined),
+    id: 'demo-1',
+    type: 'repo',
+    description: 'Example repo',
+    verified: false,
     ...overrides,
   };
 }
 
 describe('DemoItemList', () => {
+  beforeEach(() => {
+    addDemoItemMock.mockClear();
+    updateDemoItemMock.mockClear();
+    removeDemoItemMock.mockClear();
+  });
+
   it('renders empty state when no items', () => {
-    render(<DemoItemList {...createDefaultProps()} />);
-    expect(screen.getByText(/No demo items yet/)).toBeInTheDocument();
-  });
+    render(<DemoItemList contentId="c1" items={[]} />);
 
-  it('renders Add Demo Item button', () => {
-    render(<DemoItemList {...createDefaultProps()} />);
-    expect(screen.getByText('Add Demo Item')).toBeInTheDocument();
-  });
-
-  it('calls setShowForm when Add Demo Item is clicked', async () => {
-    const setShowForm = vi.fn();
-    const user = userEvent.setup();
-    render(<DemoItemList {...createDefaultProps({ setShowForm })} />);
-
-    await user.click(screen.getByText('Add Demo Item'));
-    expect(setShowForm).toHaveBeenCalledWith(true);
-  });
-
-  it('renders inline form when showForm is true', () => {
-    render(<DemoItemList {...createDefaultProps({ showForm: true })} />);
-    expect(screen.getByPlaceholderText('Describe the demo item...')).toBeInTheDocument();
-  });
-
-  it('shows error message when demoError is set', () => {
-    render(<DemoItemList {...createDefaultProps({ showForm: true, demoError: 'Description is required' })} />);
-    expect(screen.getByText('Description is required')).toBeInTheDocument();
-  });
-
-  it('calls onAdd when Add button is clicked', async () => {
-    const onAdd = vi.fn().mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    render(<DemoItemList {...createDefaultProps({ showForm: true, onAdd })} />);
-
-    await user.click(screen.getByRole('button', { name: 'Add' }));
-    expect(onAdd).toHaveBeenCalled();
+    expect(
+      screen.getByText(/No demo items yet/),
+    ).toBeInTheDocument();
   });
 
   it('renders demo items with type badge and description', () => {
-    const items: DemoItem[] = [
-      { id: '1', type: 'repo', description: 'Clone the sample repo', verified: false },
-      { id: '2', type: 'live-coding', description: 'Code the feature live', verified: true },
+    const items = [
+      makeDemoItem({ id: 'd1', type: 'repo', description: 'My repo' }),
+      makeDemoItem({
+        id: 'd2',
+        type: 'live-coding',
+        description: 'Code demo',
+      }),
     ];
-    render(<DemoItemList {...createDefaultProps({ items })} />);
+    render(<DemoItemList contentId="c1" items={items} />);
 
-    expect(screen.getByText('Clone the sample repo')).toBeInTheDocument();
+    expect(screen.getByText('My repo')).toBeInTheDocument();
+    expect(screen.getByText('Code demo')).toBeInTheDocument();
     expect(screen.getByText('Repo')).toBeInTheDocument();
-    expect(screen.getByText('Code the feature live')).toBeInTheDocument();
     expect(screen.getByText('Live Coding')).toBeInTheDocument();
   });
 
-  it('renders verified badge for verified items', () => {
-    const items: DemoItem[] = [
-      { id: '1', type: 'repo', description: 'Verified item', verified: true },
-    ];
-    render(<DemoItemList {...createDefaultProps({ items })} />);
-    expect(screen.getByText('Verified')).toBeInTheDocument();
-  });
-
-  it('calls onToggleVerified when checkbox is clicked', async () => {
-    const onToggleVerified = vi.fn().mockResolvedValue(undefined);
-    const items: DemoItem[] = [
-      { id: '1', type: 'repo', description: 'Test item', verified: false },
-    ];
+  it('shows inline form when Add Demo Item is clicked', async () => {
     const user = userEvent.setup();
-    render(<DemoItemList {...createDefaultProps({ items, onToggleVerified })} />);
+    render(<DemoItemList contentId="c1" items={[]} />);
 
-    await user.click(screen.getByLabelText('Mark "Test item" as verified'));
-    expect(onToggleVerified).toHaveBeenCalledWith(items[0]);
+    await user.click(screen.getByText('Add Demo Item'));
+
+    expect(screen.getByLabelText('Type')).toBeInTheDocument();
+    expect(screen.getByLabelText('Description')).toBeInTheDocument();
   });
 
-  it('shows delete confirmation dialog when delete button is clicked', async () => {
-    const items: DemoItem[] = [
-      { id: '1', type: 'repo', description: 'Item to delete', verified: false },
-    ];
+  it('calls addDemoItem with correct data on form submit', async () => {
     const user = userEvent.setup();
-    render(<DemoItemList {...createDefaultProps({ items })} />);
+    render(<DemoItemList contentId="c1" items={[]} />);
 
-    await user.click(screen.getByLabelText('Delete "Item to delete"'));
-    expect(screen.getByText('Delete demo item?')).toBeInTheDocument();
-    expect(screen.getByText(/permanently delete/)).toBeInTheDocument();
+    await user.click(screen.getByText('Add Demo Item'));
+    await user.type(screen.getByLabelText('Description'), 'New demo');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(addDemoItemMock).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({
+        type: 'repo',
+        description: 'New demo',
+        verified: false,
+      }),
+    );
   });
 
-  it('calls onRemove when delete is confirmed', async () => {
-    const onRemove = vi.fn().mockResolvedValue(undefined);
-    const items: DemoItem[] = [
-      { id: '1', type: 'repo', description: 'Item to delete', verified: false },
-    ];
+  it('toggles verified checkbox', async () => {
     const user = userEvent.setup();
-    render(<DemoItemList {...createDefaultProps({ items, onRemove })} />);
+    const item = makeDemoItem({ id: 'd1', verified: false });
+    render(<DemoItemList contentId="c1" items={[item]} />);
 
-    await user.click(screen.getByLabelText('Delete "Item to delete"'));
-    await user.click(screen.getByRole('button', { name: 'Delete' }));
-    expect(onRemove).toHaveBeenCalledWith('1');
+    const checkbox = screen.getByRole('checkbox');
+    await user.click(checkbox);
+
+    expect(updateDemoItemMock).toHaveBeenCalledWith(
+      'c1',
+      expect.objectContaining({ id: 'd1', verified: true }),
+    );
   });
 
-  it('hides empty state when form is shown', () => {
-    render(<DemoItemList {...createDefaultProps({ showForm: true })} />);
-    expect(screen.queryByText(/No demo items yet/)).not.toBeInTheDocument();
+  it('shows delete confirmation dialog and calls removeDemoItem', async () => {
+    const user = userEvent.setup();
+    const item = makeDemoItem({ id: 'd1', description: 'Test item' });
+    render(<DemoItemList contentId="c1" items={[item]} />);
+
+    // Click the trash icon button
+    const deleteButtons = screen.getAllByRole('button');
+    const trashButton = deleteButtons.find(
+      (btn) => btn.querySelector('svg') !== null && btn.className.includes('p-0'),
+    );
+    expect(trashButton).toBeDefined();
+    await user.click(trashButton!);
+
+    // Confirm dialog appears
+    expect(screen.getByText('Remove demo item?')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(removeDemoItemMock).toHaveBeenCalledWith('c1', 'd1');
+  });
+
+  it('hides form on Cancel click', async () => {
+    const user = userEvent.setup();
+    render(<DemoItemList contentId="c1" items={[]} />);
+
+    await user.click(screen.getByText('Add Demo Item'));
+    expect(screen.getByLabelText('Description')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
   });
 });

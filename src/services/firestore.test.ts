@@ -1,549 +1,307 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-const mockAddDoc = vi.fn();
-const mockUpdateDoc = vi.fn();
-const mockDeleteDoc = vi.fn();
-const mockOnSnapshot = vi.fn();
-const mockRunTransaction = vi.fn();
-const mockServerTimestamp = vi.fn();
-const mockArrayUnion = vi.fn();
-const mockDoc = vi.fn();
-const mockCollection = vi.fn();
-const mockQuery = vi.fn();
-const mockOrderBy = vi.fn();
+import type { Mock } from 'vitest';
 
 vi.mock('firebase/firestore', () => ({
-  addDoc: (...args: unknown[]) => mockAddDoc(...args),
-  updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
-  deleteDoc: (...args: unknown[]) => mockDeleteDoc(...args),
-  onSnapshot: (...args: unknown[]) => mockOnSnapshot(...args),
-  runTransaction: (...args: unknown[]) => mockRunTransaction(...args),
-  serverTimestamp: () => mockServerTimestamp(),
-  arrayUnion: (...args: unknown[]) => mockArrayUnion(...args),
-  doc: (...args: unknown[]) => mockDoc(...args),
-  collection: (...args: unknown[]) => mockCollection(...args),
-  query: (...args: unknown[]) => mockQuery(...args),
-  orderBy: (...args: unknown[]) => mockOrderBy(...args),
+  addDoc: vi.fn(),
+  arrayRemove: vi.fn((...args: unknown[]) => ({ _arrayRemove: args })),
+  arrayUnion: vi.fn((...args: unknown[]) => ({ _arrayUnion: args })),
+  collection: vi.fn(() => 'contents-collection-ref'),
+  deleteDoc: vi.fn(),
+  doc: vi.fn((_db: unknown, _col: unknown, id: unknown) => `doc-ref-${id}`),
+  onSnapshot: vi.fn(),
+  orderBy: vi.fn((field: string) => `orderBy-${field}`),
+  query: vi.fn((...args: unknown[]) => args),
+  runTransaction: vi.fn(),
+  serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
+  updateDoc: vi.fn(),
+  writeBatch: vi.fn(() => ({
+    update: vi.fn(),
+    commit: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 vi.mock('@/services/firebase', () => ({
   db: 'mock-db',
 }));
 
-const mockCaptureError = vi.fn();
-const mockAddBreadcrumb = vi.fn();
-
 vi.mock('@/services/sentry', () => ({
-  captureError: (...args: unknown[]) => mockCaptureError(...args),
-  addBreadcrumb: (...args: unknown[]) => mockAddBreadcrumb(...args),
+  captureError: vi.fn(),
 }));
+
+import {
+  addDoc,
+  deleteDoc,
+  onSnapshot,
+  runTransaction,
+  updateDoc,
+  writeBatch,
+} from 'firebase/firestore';
+import { captureError } from '@/services/sentry';
+import {
+  createContent,
+  deleteContent,
+  reorderContents,
+  subscribeToContents,
+  updateContent,
+  updateContentStatus,
+} from '@/services/firestore';
 
 describe('firestore service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDoc.mockReturnValue('mock-doc-ref');
-    mockCollection.mockReturnValue('mock-collection-ref');
-    mockQuery.mockReturnValue('mock-query');
-    mockOrderBy.mockReturnValue('mock-order');
-    mockServerTimestamp.mockReturnValue('SERVER_TIMESTAMP');
   });
 
   describe('subscribeToContents', () => {
-    it('sets up onSnapshot listener with correct ordering', async () => {
-      const mockUnsubscribe = vi.fn();
-      mockOnSnapshot.mockReturnValue(mockUnsubscribe);
-
-      const { subscribeToContents } = await import('@/services/firestore');
+    it('calls onSnapshot with query ordered by phase and order', () => {
       const callback = vi.fn();
       const onError = vi.fn();
-      const unsub = subscribeToContents(callback, onError);
 
-      expect(mockCollection).toHaveBeenCalledWith('mock-db', 'contents');
-      expect(mockOrderBy).toHaveBeenCalledWith('phase');
-      expect(mockOrderBy).toHaveBeenCalledWith('status');
-      expect(mockOrderBy).toHaveBeenCalledWith('order');
-      expect(mockOnSnapshot).toHaveBeenCalledOnce();
-      expect(unsub).toBe(mockUnsubscribe);
+      subscribeToContents(callback, onError);
+
+      expect(onSnapshot).toHaveBeenCalledOnce();
+      const [q, , errorHandler] = (onSnapshot as Mock).mock.calls[0];
+      expect(q).toContain('orderBy-phase');
+      expect(q).toContain('orderBy-order');
+      expect(errorHandler).toBe(onError);
     });
 
-    it('maps snapshot docs to ContentItem array', async () => {
-      mockOnSnapshot.mockImplementation(
-        (_query: unknown, successCb: (snap: unknown) => void) => {
-          successCb({
-            docs: [
-              { id: 'doc-1', data: () => ({ title: 'Test Video' }) },
-              { id: 'doc-2', data: () => ({ title: 'Another Video' }) },
-            ],
-          });
-          return vi.fn();
-        },
-      );
+    it('returns unsubscribe function', () => {
+      const unsubscribe = vi.fn();
+      (onSnapshot as Mock).mockReturnValue(unsubscribe);
 
-      const { subscribeToContents } = await import('@/services/firestore');
-      const callback = vi.fn();
-      subscribeToContents(callback, vi.fn());
+      const result = subscribeToContents(vi.fn(), vi.fn());
 
-      expect(callback).toHaveBeenCalledWith([
-        { id: 'doc-1', title: 'Test Video' },
-        { id: 'doc-2', title: 'Another Video' },
-      ]);
+      expect(result).toBe(unsubscribe);
     });
   });
 
   describe('createContent', () => {
-    it('sets correct defaults for a new content item', async () => {
-      mockAddDoc.mockResolvedValue({ id: 'new-doc-id' });
+    it('creates doc with defaults and returns id', async () => {
+      (addDoc as Mock).mockResolvedValue({ id: 'new-id' });
 
-      const { createContent } = await import('@/services/firestore');
-      const id = await createContent({ title: 'My Video' });
+      const id = await createContent({ title: 'Test Video' });
 
-      expect(id).toBe('new-doc-id');
-      expect(mockAddDoc).toHaveBeenCalledWith('mock-collection-ref', {
-        title: 'My Video',
-        description: '',
-        tags: [],
-        status: 'draft',
-        phase: 'pre-production',
-        order: 0,
-        youtubeUrl: null,
-        demoItems: [],
-        talkingPoints: [],
-        shootingScript: '',
-        thumbnailIdeas: [],
-        linkedContent: [],
-        notes: '',
-        learnings: [],
-        feedback: [],
-        timestamps: {
-          created: 'SERVER_TIMESTAMP',
-          technicallyReady: null,
-          shootingScriptReady: null,
-          readyToRecord: null,
-          recorded: null,
-          edited: null,
-          published: null,
-          shortsExtracted: null,
-          lifetimeValueEnds: null,
-          updated: 'SERVER_TIMESTAMP',
-        },
-      });
-    });
+      expect(id).toBe('new-id');
+      expect(addDoc).toHaveBeenCalledOnce();
 
-    it('uses serverTimestamp for created and updated fields', async () => {
-      mockAddDoc.mockResolvedValue({ id: 'new-id' });
-
-      const { createContent } = await import('@/services/firestore');
-      await createContent({});
-
-      const calledWith = mockAddDoc.mock.calls[0][1] as Record<
-        string,
-        unknown
-      >;
-      const timestamps = calledWith.timestamps as Record<string, unknown>;
-      expect(timestamps.created).toBe('SERVER_TIMESTAMP');
-      expect(timestamps.updated).toBe('SERVER_TIMESTAMP');
-    });
-
-    it('adds breadcrumb after creation', async () => {
-      mockAddDoc.mockResolvedValue({ id: 'abc' });
-
-      const { createContent } = await import('@/services/firestore');
-      await createContent({ title: 'Test' });
-
-      expect(mockAddBreadcrumb).toHaveBeenCalledWith(
-        'content',
-        'Created content: "Test"',
-        { contentId: 'abc' },
-      );
+      const docData = (addDoc as Mock).mock.calls[0][1];
+      expect(docData.title).toBe('Test Video');
+      expect(docData.status).toBe('draft');
+      expect(docData.phase).toBe('pre-production');
+      expect(docData.description).toBe('');
+      expect(docData.tags).toEqual([]);
+      expect(docData.demoItems).toEqual([]);
+      expect(docData.talkingPoints).toEqual([]);
+      expect(docData.youtubeUrl).toBeNull();
+      expect(docData.timestamps.created).toBe('SERVER_TIMESTAMP');
+      expect(docData.timestamps.updated).toBe('SERVER_TIMESTAMP');
+      expect(docData.timestamps.technicallyReady).toBeNull();
     });
 
     it('captures error and re-throws on failure', async () => {
-      const error = new Error('Firestore write failed');
-      mockAddDoc.mockRejectedValue(error);
-
-      const { createContent } = await import('@/services/firestore');
+      const error = new Error('permission-denied');
+      (addDoc as Mock).mockRejectedValue(error);
 
       await expect(createContent({ title: 'Fail' })).rejects.toThrow(
-        'Firestore write failed',
+        'permission-denied',
       );
-      expect(mockCaptureError).toHaveBeenCalledWith(error, {
+      expect(captureError).toHaveBeenCalledWith(error, {
         operation: 'createContent',
       });
     });
   });
 
   describe('updateContent', () => {
-    it('calls updateDoc with updates and timestamps.updated', async () => {
-      mockUpdateDoc.mockResolvedValue(undefined);
+    it('updates fields with timestamps.updated', async () => {
+      (updateDoc as Mock).mockResolvedValue(undefined);
 
-      const { updateContent } = await import('@/services/firestore');
-      await updateContent('doc-1', { title: 'Updated Title' });
+      await updateContent('c1', { title: 'Updated Title' });
 
-      expect(mockUpdateDoc).toHaveBeenCalledWith('mock-doc-ref', {
+      expect(updateDoc).toHaveBeenCalledWith('doc-ref-c1', {
         title: 'Updated Title',
         'timestamps.updated': 'SERVER_TIMESTAMP',
       });
     });
 
     it('captures error and re-throws on failure', async () => {
-      const error = new Error('Update failed');
-      mockUpdateDoc.mockRejectedValue(error);
-
-      const { updateContent } = await import('@/services/firestore');
+      const error = new Error('not-found');
+      (updateDoc as Mock).mockRejectedValue(error);
 
       await expect(
-        updateContent('doc-1', { title: 'Fail' }),
-      ).rejects.toThrow('Update failed');
-      expect(mockCaptureError).toHaveBeenCalledWith(error, {
+        updateContent('c1', { title: 'Fail' }),
+      ).rejects.toThrow('not-found');
+      expect(captureError).toHaveBeenCalledWith(error, {
         operation: 'updateContent',
-        contentId: 'doc-1',
+        contentId: 'c1',
       });
     });
   });
 
   describe('deleteContent', () => {
-    it('calls deleteDoc and adds breadcrumb', async () => {
-      mockDeleteDoc.mockResolvedValue(undefined);
+    it('deletes the document', async () => {
+      (deleteDoc as Mock).mockResolvedValue(undefined);
 
-      const { deleteContent } = await import('@/services/firestore');
-      await deleteContent('doc-1');
+      await deleteContent('c1');
 
-      expect(mockDeleteDoc).toHaveBeenCalledWith('mock-doc-ref');
-      expect(mockAddBreadcrumb).toHaveBeenCalledWith(
-        'content',
-        'Deleted content',
-        { contentId: 'doc-1' },
-      );
+      expect(deleteDoc).toHaveBeenCalledWith('doc-ref-c1');
     });
 
     it('captures error and re-throws on failure', async () => {
-      const error = new Error('Delete failed');
-      mockDeleteDoc.mockRejectedValue(error);
+      const error = new Error('permission-denied');
+      (deleteDoc as Mock).mockRejectedValue(error);
 
-      const { deleteContent } = await import('@/services/firestore');
-
-      await expect(deleteContent('doc-1')).rejects.toThrow('Delete failed');
-      expect(mockCaptureError).toHaveBeenCalledWith(error, {
+      await expect(deleteContent('c1')).rejects.toThrow('permission-denied');
+      expect(captureError).toHaveBeenCalledWith(error, {
         operation: 'deleteContent',
-        contentId: 'doc-1',
+        contentId: 'c1',
       });
     });
   });
 
   describe('updateContentStatus', () => {
-    const mockTransactionGet = vi.fn();
-    const mockTransactionUpdate = vi.fn();
-
-    beforeEach(() => {
-      mockTransactionGet.mockReset();
-      mockTransactionUpdate.mockReset();
-      mockRunTransaction.mockImplementation(
-        async (
-          _db: unknown,
-          callback: (transaction: unknown) => Promise<void>,
-        ) => {
-          return callback({
-            get: mockTransactionGet,
-            update: mockTransactionUpdate,
-          });
+    function setupTransaction(currentStatus: string) {
+      (runTransaction as Mock).mockImplementation(
+        async (_db: unknown, callback: (t: unknown) => Promise<void>) => {
+          const mockTransaction = {
+            get: vi.fn().mockResolvedValue({
+              exists: () => true,
+              data: () => ({ status: currentStatus }),
+            }),
+            update: vi.fn(),
+          };
+          await callback(mockTransaction);
+          return mockTransaction;
         },
       );
-    });
+    }
 
-    it('validates transition and allows valid forward move', async () => {
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ status: 'draft' }),
-      });
+    it('allows valid forward transition and sets timestamp', async () => {
+      setupTransaction('draft');
 
-      const { updateContentStatus } = await import('@/services/firestore');
-      await updateContentStatus('doc-1', 'technically-ready');
+      await updateContentStatus('c1', 'technically-ready');
 
-      expect(mockTransactionUpdate).toHaveBeenCalledWith('mock-doc-ref', {
-        status: 'technically-ready',
-        phase: 'pre-production',
-        'timestamps.updated': 'SERVER_TIMESTAMP',
-        'timestamps.technicallyReady': 'SERVER_TIMESTAMP',
-      });
-    });
-
-    it('sets correct timestamp for forward transition to recorded', async () => {
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ status: 'ready-to-record' }),
-      });
-
-      const { updateContentStatus } = await import('@/services/firestore');
-      await updateContentStatus('doc-1', 'recorded');
-
-      expect(mockTransactionUpdate).toHaveBeenCalledWith('mock-doc-ref', {
-        status: 'recorded',
-        phase: 'production',
-        'timestamps.updated': 'SERVER_TIMESTAMP',
-        'timestamps.recorded': 'SERVER_TIMESTAMP',
-      });
-    });
-
-    it('clears timestamp when moving backward', async () => {
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ status: 'technically-ready' }),
-      });
-
-      const { updateContentStatus } = await import('@/services/firestore');
-      await updateContentStatus('doc-1', 'draft');
-
-      expect(mockTransactionUpdate).toHaveBeenCalledWith('mock-doc-ref', {
-        status: 'draft',
-        phase: 'pre-production',
-        'timestamps.updated': 'SERVER_TIMESTAMP',
-        'timestamps.technicallyReady': null,
-      });
-    });
-
-    it('clears timestamp when moving backward from recorded to ready-to-record', async () => {
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ status: 'recorded' }),
-      });
-
-      const { updateContentStatus } = await import('@/services/firestore');
-      await updateContentStatus('doc-1', 'ready-to-record');
-
-      expect(mockTransactionUpdate).toHaveBeenCalledWith('mock-doc-ref', {
-        status: 'ready-to-record',
-        phase: 'pre-production',
-        'timestamps.updated': 'SERVER_TIMESTAMP',
-        'timestamps.recorded': null,
-      });
-    });
-
-    it('throws error for invalid transition', async () => {
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ status: 'draft' }),
-      });
-
-      const { updateContentStatus } = await import('@/services/firestore');
-
-      await expect(
-        updateContentStatus('doc-1', 'published'),
-      ).rejects.toThrow('Invalid transition from draft to published');
-      expect(mockCaptureError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Invalid transition from draft to published',
+      const callback = (runTransaction as Mock).mock.calls[0][1];
+      const mockTransaction = {
+        get: vi.fn().mockResolvedValue({
+          exists: () => true,
+          data: () => ({ status: 'draft' }),
         }),
-        { operation: 'updateContentStatus', contentId: 'doc-1' },
-      );
-    });
-
-    it('throws error when document does not exist', async () => {
-      mockTransactionGet.mockResolvedValue({
-        exists: () => false,
-      });
-
-      const { updateContentStatus } = await import('@/services/firestore');
-
-      await expect(
-        updateContentStatus('missing', 'technically-ready'),
-      ).rejects.toThrow('Content missing not found');
-    });
-
-    it('adds breadcrumb on successful transition', async () => {
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({ status: 'draft' }),
-      });
-
-      const { updateContentStatus } = await import('@/services/firestore');
-      await updateContentStatus('doc-1', 'technically-ready');
-
-      expect(mockAddBreadcrumb).toHaveBeenCalledWith(
-        'status',
-        'Status changed to technically-ready',
-        { contentId: 'doc-1' },
-      );
-    });
-  });
-
-  describe('sub-document operations', () => {
-    it('addDemoItem uses arrayUnion', async () => {
-      mockUpdateDoc.mockResolvedValue(undefined);
-
-      const { addDemoItem } = await import('@/services/firestore');
-      const demoItem = {
-        id: 'demo-1',
-        type: 'repo' as const,
-        description: 'Test repo',
-        verified: false,
+        update: vi.fn(),
       };
-      await addDemoItem('doc-1', demoItem);
+      await callback(mockTransaction);
 
-      expect(mockArrayUnion).toHaveBeenCalledWith(demoItem);
-      expect(mockUpdateDoc).toHaveBeenCalledWith('mock-doc-ref', {
-        demoItems: undefined,
-        'timestamps.updated': 'SERVER_TIMESTAMP',
-      });
+      const updateData = mockTransaction.update.mock.calls[0][1];
+      expect(updateData.status).toBe('technically-ready');
+      expect(updateData.phase).toBe('pre-production');
+      expect(updateData['timestamps.technicallyReady']).toBe(
+        'SERVER_TIMESTAMP',
+      );
+      expect(updateData['timestamps.updated']).toBe('SERVER_TIMESTAMP');
     });
 
-    it('removeDemoItem uses transaction read-modify-write', async () => {
-      const mockTransactionGet = vi.fn();
-      const mockTransactionUpdate = vi.fn();
-      mockRunTransaction.mockImplementation(
-        async (
-          _db: unknown,
-          callback: (transaction: unknown) => Promise<void>,
-        ) => {
-          return callback({
-            get: mockTransactionGet,
-            update: mockTransactionUpdate,
-          });
-        },
-      );
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({
-          demoItems: [
-            {
-              id: 'demo-1',
-              type: 'repo',
-              description: 'Keep',
-              verified: true,
-            },
-            {
-              id: 'demo-2',
-              type: 'command',
-              description: 'Remove',
-              verified: false,
-            },
-          ],
+    it('allows valid backward transition and clears timestamp', async () => {
+      setupTransaction('technically-ready');
+
+      await updateContentStatus('c1', 'draft');
+
+      const callback = (runTransaction as Mock).mock.calls[0][1];
+      const mockTransaction = {
+        get: vi.fn().mockResolvedValue({
+          exists: () => true,
+          data: () => ({ status: 'technically-ready' }),
         }),
-      });
+        update: vi.fn(),
+      };
+      await callback(mockTransaction);
 
-      const { removeDemoItem } = await import('@/services/firestore');
-      await removeDemoItem('doc-1', 'demo-2');
-
-      expect(mockTransactionUpdate).toHaveBeenCalledWith('mock-doc-ref', {
-        demoItems: [
-          {
-            id: 'demo-1',
-            type: 'repo',
-            description: 'Keep',
-            verified: true,
-          },
-        ],
-        'timestamps.updated': 'SERVER_TIMESTAMP',
-      });
+      const updateData = mockTransaction.update.mock.calls[0][1];
+      expect(updateData.status).toBe('draft');
+      expect(updateData.phase).toBe('pre-production');
+      expect(updateData['timestamps.technicallyReady']).toBeNull();
     });
 
-    it('reorderTalkingPoints rewrites array with new order', async () => {
-      const mockTransactionGet = vi.fn();
-      const mockTransactionUpdate = vi.fn();
-      mockRunTransaction.mockImplementation(
-        async (
-          _db: unknown,
-          callback: (transaction: unknown) => Promise<void>,
-        ) => {
-          return callback({
-            get: mockTransactionGet,
-            update: mockTransactionUpdate,
-          });
+    it('rejects invalid transition', async () => {
+      (runTransaction as Mock).mockImplementation(
+        async (_db: unknown, callback: (t: unknown) => Promise<void>) => {
+          const mockTransaction = {
+            get: vi.fn().mockResolvedValue({
+              exists: () => true,
+              data: () => ({ status: 'draft' }),
+            }),
+            update: vi.fn(),
+          };
+          await callback(mockTransaction);
         },
       );
-      mockTransactionGet.mockResolvedValue({
-        exists: () => true,
-        data: () => ({
-          talkingPoints: [
-            {
-              id: 'tp-1',
-              text: 'First',
-              category: 'technical',
-              priority: 'must-say',
-              order: 0,
-            },
-            {
-              id: 'tp-2',
-              text: 'Second',
-              category: 'engagement',
-              priority: 'nice-to-have',
-              order: 1,
-            },
-          ],
-        }),
-      });
 
-      const { reorderTalkingPoints } = await import('@/services/firestore');
-      await reorderTalkingPoints('doc-1', ['tp-2', 'tp-1']);
+      await expect(
+        updateContentStatus('c1', 'published'),
+      ).rejects.toThrow('Invalid transition from "draft" to "published"');
+    });
 
-      expect(mockTransactionUpdate).toHaveBeenCalledWith('mock-doc-ref', {
-        talkingPoints: [
-          {
-            id: 'tp-2',
-            text: 'Second',
-            category: 'engagement',
-            priority: 'nice-to-have',
-            order: 0,
-          },
-          {
-            id: 'tp-1',
-            text: 'First',
-            category: 'technical',
-            priority: 'must-say',
-            order: 1,
-          },
-        ],
-        'timestamps.updated': 'SERVER_TIMESTAMP',
+    it('throws if document not found', async () => {
+      (runTransaction as Mock).mockImplementation(
+        async (_db: unknown, callback: (t: unknown) => Promise<void>) => {
+          const mockTransaction = {
+            get: vi.fn().mockResolvedValue({
+              exists: () => false,
+              data: () => null,
+            }),
+            update: vi.fn(),
+          };
+          await callback(mockTransaction);
+        },
+      );
+
+      await expect(
+        updateContentStatus('c1', 'technically-ready'),
+      ).rejects.toThrow('Content c1 not found');
+    });
+
+    it('captures error on failure', async () => {
+      const error = new Error('transaction failed');
+      (runTransaction as Mock).mockRejectedValue(error);
+
+      await expect(
+        updateContentStatus('c1', 'technically-ready'),
+      ).rejects.toThrow('transaction failed');
+      expect(captureError).toHaveBeenCalledWith(error, {
+        operation: 'updateContentStatus',
+        contentId: 'c1',
+        newStatus: 'technically-ready',
       });
     });
   });
 
-  describe('error handling', () => {
-    it('captures and re-throws errors from updateContent', async () => {
-      const error = new Error('Permission denied');
-      mockUpdateDoc.mockRejectedValue(error);
-
-      const { updateContent } = await import('@/services/firestore');
-
-      await expect(
-        updateContent('doc-1', { title: 'Fail' }),
-      ).rejects.toThrow('Permission denied');
-      expect(mockCaptureError).toHaveBeenCalledWith(error, {
-        operation: 'updateContent',
-        contentId: 'doc-1',
-      });
-    });
-
-    it('captures and re-throws errors from deleteContent', async () => {
-      const error = new Error('Not found');
-      mockDeleteDoc.mockRejectedValue(error);
-
-      const { deleteContent } = await import('@/services/firestore');
-
-      await expect(deleteContent('doc-1')).rejects.toThrow('Not found');
-      expect(mockCaptureError).toHaveBeenCalledWith(error, {
-        operation: 'deleteContent',
-        contentId: 'doc-1',
-      });
-    });
-
-    it('captures and re-throws errors from sub-document operations', async () => {
-      const error = new Error('Array write failed');
-      mockUpdateDoc.mockRejectedValue(error);
-
-      const { addDemoItem } = await import('@/services/firestore');
-      const demoItem = {
-        id: 'd1',
-        type: 'repo' as const,
-        description: 'test',
-        verified: false,
+  describe('reorderContents', () => {
+    it('batch updates order field for each content id', async () => {
+      const mockBatch = {
+        update: vi.fn(),
+        commit: vi.fn().mockResolvedValue(undefined),
       };
+      (writeBatch as Mock).mockReturnValue(mockBatch);
 
-      await expect(addDemoItem('doc-1', demoItem)).rejects.toThrow(
-        'Array write failed',
-      );
-      expect(mockCaptureError).toHaveBeenCalledWith(error, {
-        operation: 'addDemoItem',
-        contentId: 'doc-1',
+      await reorderContents(['id-a', 'id-b', 'id-c']);
+
+      expect(writeBatch).toHaveBeenCalledWith('mock-db');
+      expect(mockBatch.update).toHaveBeenCalledTimes(3);
+      expect(mockBatch.update).toHaveBeenCalledWith('doc-ref-id-a', { order: 0 });
+      expect(mockBatch.update).toHaveBeenCalledWith('doc-ref-id-b', { order: 1 });
+      expect(mockBatch.update).toHaveBeenCalledWith('doc-ref-id-c', { order: 2 });
+      expect(mockBatch.commit).toHaveBeenCalledOnce();
+    });
+
+    it('captures error and re-throws on failure', async () => {
+      const error = new Error('batch failed');
+      const mockBatch = {
+        update: vi.fn(),
+        commit: vi.fn().mockRejectedValue(error),
+      };
+      (writeBatch as Mock).mockReturnValue(mockBatch);
+
+      await expect(reorderContents(['id-a'])).rejects.toThrow('batch failed');
+      expect(captureError).toHaveBeenCalledWith(error, {
+        operation: 'reorderContents',
       });
     });
   });

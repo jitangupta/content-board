@@ -5,26 +5,37 @@ import { ChipInput } from '@/components/common/ChipInput';
 
 describe('ChipInput', () => {
   it('renders existing chips', () => {
-    render(<ChipInput value={['react', 'typescript']} onChange={vi.fn()} />);
+    render(<ChipInput values={['react', 'typescript']} onChange={vi.fn()} />);
+
     expect(screen.getByText('react')).toBeInTheDocument();
     expect(screen.getByText('typescript')).toBeInTheDocument();
   });
 
   it('adds a chip on Enter', async () => {
-    const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<ChipInput value={[]} onChange={onChange} />);
+    const onChange = vi.fn();
+    render(<ChipInput values={[]} onChange={onChange} />);
 
     const input = screen.getByRole('textbox');
-    await user.type(input, 'newtag{Enter}');
+    await user.type(input, 'newchip{Enter}');
 
-    expect(onChange).toHaveBeenCalledWith(['newtag']);
+    expect(onChange).toHaveBeenCalledWith(['newchip']);
+  });
+
+  it('clears input after adding a chip', async () => {
+    const user = userEvent.setup();
+    render(<ChipInput values={[]} onChange={vi.fn()} />);
+
+    const input = screen.getByRole('textbox');
+    await user.type(input, 'newchip{Enter}');
+
+    expect(input).toHaveValue('');
   });
 
   it('does not add duplicate chips', async () => {
-    const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<ChipInput value={['existing']} onChange={onChange} />);
+    const onChange = vi.fn();
+    render(<ChipInput values={['existing']} onChange={onChange} />);
 
     const input = screen.getByRole('textbox');
     await user.type(input, 'existing{Enter}');
@@ -33,9 +44,9 @@ describe('ChipInput', () => {
   });
 
   it('does not add empty chips', async () => {
-    const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<ChipInput value={[]} onChange={onChange} />);
+    const onChange = vi.fn();
+    render(<ChipInput values={[]} onChange={onChange} />);
 
     const input = screen.getByRole('textbox');
     await user.type(input, '   {Enter}');
@@ -44,34 +55,31 @@ describe('ChipInput', () => {
   });
 
   it('removes a chip when X is clicked', async () => {
-    const onChange = vi.fn();
     const user = userEvent.setup();
-    render(<ChipInput value={['react', 'vue']} onChange={onChange} />);
-
-    await user.click(screen.getByLabelText('Remove react'));
-
-    expect(onChange).toHaveBeenCalledWith(['vue']);
-  });
-
-  it('removes last chip on Backspace when input is empty', async () => {
     const onChange = vi.fn();
-    const user = userEvent.setup();
-    render(<ChipInput value={['react', 'vue']} onChange={onChange} />);
+    render(<ChipInput values={['react', 'typescript']} onChange={onChange} />);
 
-    const input = screen.getByRole('textbox');
-    await user.click(input);
-    await user.keyboard('{Backspace}');
+    const removeButton = screen.getByRole('button', { name: 'Remove react' });
+    await user.click(removeButton);
 
-    expect(onChange).toHaveBeenCalledWith(['react']);
+    expect(onChange).toHaveBeenCalledWith(['typescript']);
   });
 
   it('shows placeholder when no chips', () => {
-    render(<ChipInput value={[]} onChange={vi.fn()} placeholder="Add tag..." />);
-    expect(screen.getByPlaceholderText('Add tag...')).toBeInTheDocument();
+    render(<ChipInput values={[]} onChange={vi.fn()} placeholder="Add tags" />);
+
+    expect(screen.getByPlaceholderText('Add tags')).toBeInTheDocument();
   });
 
   it('hides placeholder when chips exist', () => {
-    render(<ChipInput value={['react']} onChange={vi.fn()} placeholder="Add tag..." />);
-    expect(screen.queryByPlaceholderText('Add tag...')).not.toBeInTheDocument();
+    render(
+      <ChipInput
+        values={['react']}
+        onChange={vi.fn()}
+        placeholder="Add tags"
+      />,
+    );
+
+    expect(screen.queryByPlaceholderText('Add tags')).not.toBeInTheDocument();
   });
 });

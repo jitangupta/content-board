@@ -1,44 +1,45 @@
 import {
   GoogleAuthProvider,
+  onAuthStateChanged as firebaseOnAuthStateChanged,
   signInWithPopup,
   signOut as firebaseSignOut,
-  onAuthStateChanged as firebaseOnAuthStateChanged,
-  type User,
-  type Unsubscribe,
 } from 'firebase/auth';
+import type { User, Unsubscribe } from 'firebase/auth';
 import { auth } from '@/services/firebase';
 import {
-  setUserContext,
-  clearUserContext,
   addBreadcrumb,
   captureError,
+  clearUserContext,
+  setUserContext,
 } from '@/services/sentry';
 
-export type { User, Unsubscribe };
+export const ALLOWED_EMAIL = 'gtangupta@gmail.com';
 
 const googleProvider = new GoogleAuthProvider();
 
-export async function signInWithGoogle(): Promise<User> {
+export function isAuthorizedUser(email: string | null): boolean {
+  return email === ALLOWED_EMAIL;
+}
+
+export async function signInWithGoogle(): Promise<void> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    setUserContext(result.user.email ?? 'unknown');
-    addBreadcrumb('auth', 'User signed in', {
-      email: result.user.email ?? 'unknown',
-    });
-    return result.user;
-  } catch (error) {
-    captureError(error, { operation: 'signInWithGoogle' });
+    const email = result.user.email ?? 'unknown';
+    setUserContext(email);
+    addBreadcrumb('auth', 'User signed in with Google', { email });
+  } catch (error: unknown) {
+    captureError(error, { action: 'sign-in' });
     throw error;
   }
 }
 
 export async function signOut(): Promise<void> {
   try {
-    await firebaseSignOut(auth);
-    clearUserContext();
     addBreadcrumb('auth', 'User signed out');
-  } catch (error) {
-    captureError(error, { operation: 'signOut' });
+    clearUserContext();
+    await firebaseSignOut(auth);
+  } catch (error: unknown) {
+    captureError(error, { action: 'sign-out' });
     throw error;
   }
 }
@@ -46,12 +47,5 @@ export async function signOut(): Promise<void> {
 export function onAuthStateChanged(
   callback: (user: User | null) => void,
 ): Unsubscribe {
-  return firebaseOnAuthStateChanged(auth, (user) => {
-    if (user) {
-      setUserContext(user.email ?? 'unknown');
-    } else {
-      clearUserContext();
-    }
-    callback(user);
-  });
+  return firebaseOnAuthStateChanged(auth, callback);
 }

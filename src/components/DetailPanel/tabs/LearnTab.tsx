@@ -1,14 +1,24 @@
-import type { ContentItem } from '@/types/content';
+import { useNavigate } from 'react-router-dom';
 import { LearningList } from '@/features/learn/LearningList';
+import type { ContentItem } from '@/types/content';
 
 interface LearnTabProps {
-  item: ContentItem;
+  content: ContentItem;
 }
 
-export function LearnTab({ item }: LearnTabProps) {
+export function LearnTab({ content }: LearnTabProps) {
+  const navigate = useNavigate();
+
+  function handleNavigateToContent(contentId: string): void {
+    navigate(`/content/${contentId}/learn`);
+  }
+
   return (
-    <div className="p-6">
-      <LearningList item={item} />
+    <div className="py-4">
+      <LearningList
+        content={content}
+        onNavigateToContent={handleNavigateToContent}
+      />
     </div>
   );
 }

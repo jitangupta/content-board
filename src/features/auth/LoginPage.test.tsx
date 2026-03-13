@@ -1,80 +1,80 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { userEvent } from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { AuthContext, type AuthContextValue } from '@/features/auth/AuthProvider';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { LoginPage } from '@/features/auth/LoginPage';
-import type { User } from '@/services/auth';
+import { useAuth } from '@/features/auth/useAuth';
+import type { AuthContextValue } from '@/types/auth';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-}));
+vi.mock('@/features/auth/useAuth');
 
-function renderLoginPage(authValue?: Partial<AuthContextValue>) {
-  const defaultValue: AuthContextValue = {
-    user: null,
-    loading: false,
-    signIn: vi.fn(),
-    signOut: vi.fn(),
-    ...authValue,
-  };
-
+function renderLoginPage() {
   return render(
-    <AuthContext.Provider value={defaultValue}>
-      <MemoryRouter initialEntries={['/login']}>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<div>Dashboard</div>} />
-        </Routes>
-      </MemoryRouter>
-    </AuthContext.Provider>,
+    <MemoryRouter>
+      <LoginPage />
+    </MemoryRouter>,
   );
 }
 
 describe('LoginPage', () => {
-  it('renders the app name', () => {
-    renderLoginPage();
-    expect(screen.getByText('Content Board')).toBeInTheDocument();
-  });
+  it('renders sign-in button', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      loading: false,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+    } satisfies AuthContextValue);
 
-  it('renders the sign-in button', () => {
     renderLoginPage();
-    expect(
-      screen.getByRole('button', { name: /sign in with google/i }),
-    ).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: 'Sign in with Google' })).toBeInTheDocument();
+    expect(screen.getByText('Content Board')).toBeInTheDocument();
   });
 
   it('calls signIn when button is clicked', async () => {
     const mockSignIn = vi.fn().mockResolvedValue(undefined);
-    renderLoginPage({ signIn: mockSignIn });
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      loading: false,
+      signIn: mockSignIn,
+      signOut: vi.fn(),
+    } satisfies AuthContextValue);
+
+    renderLoginPage();
 
     const user = userEvent.setup();
-    await user.click(
-      screen.getByRole('button', { name: /sign in with google/i }),
-    );
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
     expect(mockSignIn).toHaveBeenCalledOnce();
   });
 
   it('shows error message when sign-in fails', async () => {
-    const mockSignIn = vi.fn().mockRejectedValue(new Error('Auth error'));
-    renderLoginPage({ signIn: mockSignIn });
+    const mockSignIn = vi.fn().mockRejectedValue(new Error('popup closed'));
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      loading: false,
+      signIn: mockSignIn,
+      signOut: vi.fn(),
+    } satisfies AuthContextValue);
+
+    renderLoginPage();
 
     const user = userEvent.setup();
-    await user.click(
-      screen.getByRole('button', { name: /sign in with google/i }),
-    );
+    await user.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
-    expect(
-      screen.getByText('Sign-in failed. Please try again.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Sign-in failed: popup closed')).toBeInTheDocument();
   });
 
-  it('redirects to / when user is already authenticated', () => {
-    const mockUser = { email: 'gtangupta@gmail.com' } as User;
-    renderLoginPage({ user: mockUser });
+  it('shows spinner when loading', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+      loading: true,
+      signIn: vi.fn(),
+      signOut: vi.fn(),
+    } satisfies AuthContextValue);
 
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.queryByText('Content Board')).not.toBeInTheDocument();
+    renderLoginPage();
+
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });

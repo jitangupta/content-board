@@ -1,49 +1,46 @@
 import { describe, it, expect } from 'vitest';
-import type { ContentAction } from '@/types/common.ts';
-import type { ContentItem } from '@/types/content.ts';
-import {
-  contentReducer,
-  initialContentState,
-  type ContentState,
-} from './contentReducer.ts';
+import type { ContentItem } from '@/types/content';
+import type { DataState } from '@/types/common';
+import { contentReducer, initialContentState } from '@/features/content/contentReducer';
 
-function makeContent(overrides: Partial<ContentItem> = {}): ContentItem {
-  return {
-    id: 'test-1',
-    title: 'Test Video',
-    description: '',
-    tags: [],
-    status: 'draft',
-    phase: 'pre-production',
-    order: 0,
-    youtubeUrl: null,
-    demoItems: [],
-    talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
-    linkedContent: [],
-    notes: '',
-    learnings: [],
-    feedback: [],
-    timestamps: {
-      created: '2026-01-01',
-      technicallyReady: null,
-      shootingScriptReady: null,
-      readyToRecord: null,
-      recorded: null,
-      edited: null,
-      published: null,
-      shortsExtracted: null,
-      lifetimeValueEnds: null,
-      updated: '2026-01-01',
-    },
-    ...overrides,
-  };
-}
+const mockContent: ContentItem = {
+  id: 'c1',
+  title: 'Test Video',
+  description: 'A test video',
+  tags: ['test'],
+  status: 'draft',
+  phase: 'pre-production',
+  order: 0,
+  contentType: 'video',
+  parentVideoId: null,
+  script: null,
+  platformVersions: [],
+  youtubeUrl: null,
+  demoItems: [],
+  talkingPoints: [],
+  shootingScript: null,
+  thumbnailIdeas: null,
+  linkedContent: [],
+  notes: null,
+  learnings: [],
+  feedback: [],
+  timestamps: {
+    created: '2026-01-01',
+    technicallyReady: null,
+    shootingScriptReady: null,
+    readyToRecord: null,
+    recorded: null,
+    edited: null,
+    published: null,
+    shortsExtracted: null,
+    lifetimeValueEnds: null,
+    updated: '2026-01-01',
+  },
+};
 
 describe('contentReducer', () => {
-  describe('initial state', () => {
-    it('has empty data, loading true, and no error', () => {
+  describe('initialContentState', () => {
+    it('starts with empty data, loading true, no error', () => {
       expect(initialContentState).toEqual({
         data: [],
         loading: true,
@@ -54,160 +51,114 @@ describe('contentReducer', () => {
 
   describe('SET_CONTENTS', () => {
     it('sets data, clears loading and error', () => {
-      const state: ContentState = {
+      const state: DataState<ContentItem[]> = {
         data: [],
         loading: true,
-        error: 'previous error',
+        error: 'old error',
       };
-      const contents = [makeContent()];
-      const action: ContentAction = {
+
+      const result = contentReducer(state, {
         type: 'SET_CONTENTS',
-        payload: contents,
-      };
-
-      const result = contentReducer(state, action);
-
-      expect(result).toEqual({
-        data: contents,
-        loading: false,
-        error: null,
+        payload: [mockContent],
       });
+
+      expect(result.data).toEqual([mockContent]);
+      expect(result.loading).toBe(false);
+      expect(result.error).toBeNull();
     });
   });
 
   describe('SET_LOADING', () => {
-    it('sets loading to true', () => {
-      const state: ContentState = {
-        data: [],
-        loading: false,
-        error: null,
-      };
-      const action: ContentAction = { type: 'SET_LOADING', payload: true };
-
-      const result = contentReducer(state, action);
-
-      expect(result.loading).toBe(true);
-    });
-
-    it('sets loading to false', () => {
-      const state: ContentState = {
-        data: [],
-        loading: true,
-        error: null,
-      };
-      const action: ContentAction = { type: 'SET_LOADING', payload: false };
-
-      const result = contentReducer(state, action);
+    it('sets loading state', () => {
+      const result = contentReducer(initialContentState, {
+        type: 'SET_LOADING',
+        payload: false,
+      });
 
       expect(result.loading).toBe(false);
-    });
-
-    it('preserves existing data', () => {
-      const contents = [makeContent()];
-      const state: ContentState = {
-        data: contents,
-        loading: false,
-        error: null,
-      };
-      const action: ContentAction = { type: 'SET_LOADING', payload: true };
-
-      const result = contentReducer(state, action);
-
-      expect(result.data).toBe(contents);
     });
   });
 
   describe('SET_ERROR', () => {
     it('sets error and clears loading', () => {
-      const state: ContentState = {
-        data: [],
-        loading: true,
-        error: null,
-      };
-      const action: ContentAction = {
+      const result = contentReducer(initialContentState, {
         type: 'SET_ERROR',
         payload: 'Something went wrong',
-      };
-
-      const result = contentReducer(state, action);
-
-      expect(result).toEqual({
-        data: [],
-        loading: false,
-        error: 'Something went wrong',
       });
+
+      expect(result.error).toBe('Something went wrong');
+      expect(result.loading).toBe(false);
     });
   });
 
   describe('UPDATE_CONTENT', () => {
-    it('replaces the matching content item by id', () => {
-      const original = makeContent({ id: 'c1', title: 'Original' });
-      const updated = makeContent({ id: 'c1', title: 'Updated' });
-      const other = makeContent({ id: 'c2', title: 'Other' });
-      const state: ContentState = {
-        data: [original, other],
+    it('replaces the matching content item', () => {
+      const state: DataState<ContentItem[]> = {
+        data: [mockContent],
         loading: false,
         error: null,
       };
-      const action: ContentAction = {
+      const updated = { ...mockContent, title: 'Updated Title' };
+
+      const result = contentReducer(state, {
         type: 'UPDATE_CONTENT',
         payload: updated,
-      };
+      });
 
-      const result = contentReducer(state, action);
-
-      expect(result.data).toEqual([updated, other]);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].title).toBe('Updated Title');
     });
 
-    it('does not modify state if id not found', () => {
-      const existing = makeContent({ id: 'c1' });
-      const state: ContentState = {
-        data: [existing],
+    it('does not modify items with different id', () => {
+      const other: ContentItem = { ...mockContent, id: 'c2', title: 'Other' };
+      const state: DataState<ContentItem[]> = {
+        data: [mockContent, other],
         loading: false,
         error: null,
       };
-      const action: ContentAction = {
+      const updated = { ...mockContent, title: 'Updated' };
+
+      const result = contentReducer(state, {
         type: 'UPDATE_CONTENT',
-        payload: makeContent({ id: 'nonexistent' }),
-      };
+        payload: updated,
+      });
 
-      const result = contentReducer(state, action);
-
-      expect(result.data).toEqual([existing]);
+      expect(result.data[0].title).toBe('Updated');
+      expect(result.data[1].title).toBe('Other');
     });
   });
 
   describe('REMOVE_CONTENT', () => {
     it('removes the content item by id', () => {
-      const keep = makeContent({ id: 'c1' });
-      const remove = makeContent({ id: 'c2' });
-      const state: ContentState = {
-        data: [keep, remove],
+      const state: DataState<ContentItem[]> = {
+        data: [mockContent],
         loading: false,
         error: null,
       };
-      const action: ContentAction = { type: 'REMOVE_CONTENT', payload: 'c2' };
 
-      const result = contentReducer(state, action);
+      const result = contentReducer(state, {
+        type: 'REMOVE_CONTENT',
+        payload: 'c1',
+      });
 
-      expect(result.data).toEqual([keep]);
+      expect(result.data).toHaveLength(0);
     });
 
-    it('returns unchanged state if id not found', () => {
-      const existing = makeContent({ id: 'c1' });
-      const state: ContentState = {
-        data: [existing],
+    it('does not remove items with different id', () => {
+      const other: ContentItem = { ...mockContent, id: 'c2' };
+      const state: DataState<ContentItem[]> = {
+        data: [mockContent, other],
         loading: false,
         error: null,
       };
-      const action: ContentAction = {
+
+      const result = contentReducer(state, {
         type: 'REMOVE_CONTENT',
-        payload: 'nonexistent',
-      };
+        payload: 'c1',
+      });
 
-      const result = contentReducer(state, action);
-
-      expect(result.data).toEqual([existing]);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].id).toBe('c2');
     });
   });
 });

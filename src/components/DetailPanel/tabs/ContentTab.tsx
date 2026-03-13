@@ -1,275 +1,162 @@
-import { Trash2, Plus, ExternalLink, X } from 'lucide-react';
-import type { ContentItem, LinkedContentPlatform } from '@/types/content';
-import { useContentTab } from '@/hooks/useContentTab';
-import { StatusBadge } from '@/components/common/StatusBadge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { ChipInput } from '@/components/common/ChipInput';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-
-const PLATFORM_OPTIONS: { value: LinkedContentPlatform; label: string }[] = [
-  { value: 'blog', label: 'Blog' },
-  { value: 'linkedin', label: 'LinkedIn' },
-  { value: 'twitter', label: 'Twitter' },
-  { value: 'other', label: 'Other' },
-];
+import { StatusBadge } from '@/components/common/StatusBadge';
+import { FormActions } from '@/components/common/FormActions';
+import { LinkedContentSection } from '@/components/DetailPanel/LinkedContentSection';
+import { PlatformVersionSection } from '@/components/DetailPanel/PlatformVersionSection';
+import { useContent } from '@/features/content/useContent';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { captureError } from '@/services/sentry';
+import { STATUS_ORDER } from '@/utils/statusHelpers';
+import type { ContentItem } from '@/types/content';
 
 interface ContentTabProps {
-  item: ContentItem;
+  content: ContentItem;
 }
 
-export function ContentTab({ item }: ContentTabProps) {
-  const {
-    title,
-    setTitle,
-    description,
-    setDescription,
-    notes,
-    setNotes,
-    youtubeUrl,
-    setYoutubeUrl,
-    deleting,
-    showYoutubeField,
-    showLinkForm,
-    setShowLinkForm,
-    linkPlatform,
-    setLinkPlatform,
-    linkUrl,
-    setLinkUrl,
-    linkLabel,
-    setLinkLabel,
-    linkError,
-    setLinkError,
-    handleBlur,
-    handleYoutubeBlur,
-    handleTagsChange,
-    handleDelete,
-    handleAddLink,
-    handleRemoveLink,
-  } = useContentTab(item);
+const PUBLISHED_INDEX = STATUS_ORDER.indexOf('published');
+const VIDEO_NULLABLE_FIELDS = ['notes', 'youtubeUrl'];
+const SHORT_NULLABLE_FIELDS = ['notes', 'youtubeUrl', 'script'];
+
+export function ContentTab({ content }: ContentTabProps) {
+  const { updateContent } = useContent();
+  const isShort = content.contentType === 'short';
+
+  const { values, setValue, isDirty, save, discard, saving, error } =
+    useFormDraft({
+      contentId: content.id,
+      initialValues: {
+        title: content.title,
+        description: content.description,
+        notes: content.notes ?? '',
+        youtubeUrl: content.youtubeUrl ?? '',
+        ...(isShort ? { script: content.script ?? '' } : {}),
+      },
+      nullableFields: isShort ? SHORT_NULLABLE_FIELDS : VIDEO_NULLABLE_FIELDS,
+    });
+
+  const showYoutubeUrl =
+    STATUS_ORDER.indexOf(content.status) >= PUBLISHED_INDEX;
+
+  async function handleTagsChange(tags: string[]): Promise<void> {
+    try {
+      await updateContent(content.id, { tags });
+    } catch (err: unknown) {
+      captureError(err, {
+        operation: 'updateContent',
+        contentId: content.id,
+        field: 'tags',
+      });
+    }
+  }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header with title + delete */}
-      <div className="flex items-start gap-3">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => handleBlur('title', title, item.title)}
-          placeholder="Untitled"
-          className="flex-1 bg-transparent text-xl font-semibold outline-none placeholder:text-muted-foreground"
-        />
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <button
-              className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              aria-label="Delete content"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                Delete &quot;{item.title || 'Untitled'}&quot;?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                This will permanently delete this content and all its data.
-                This cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleDelete}
-                disabled={deleting}
-                className="bg-destructive text-white hover:bg-destructive/90"
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-
-      {/* Status */}
+    <div className="space-y-6 py-4">
+      {/* Title */}
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-muted-foreground">Status</label>
-        <div>
-          <StatusBadge status={item.status} />
-        </div>
+        <Label htmlFor="content-title">Title</Label>
+        <Input
+          id="content-title"
+          value={values.title}
+          onChange={(e) => setValue('title', e.target.value)}
+          placeholder="Content title"
+        />
       </div>
 
       {/* Description */}
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-muted-foreground">Description</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          onBlur={() => handleBlur('description', description, item.description)}
+        <Label htmlFor="content-description">Description</Label>
+        <Textarea
+          id="content-description"
+          value={values.description}
+          onChange={(e) => setValue('description', e.target.value)}
           placeholder="What is this content about?"
           rows={3}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
         />
       </div>
 
       {/* Tags */}
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-muted-foreground">Tags</label>
+        <Label>Tags</Label>
         <ChipInput
-          value={item.tags}
+          values={content.tags}
           onChange={handleTagsChange}
-          placeholder="Add tag and press Enter..."
+          placeholder="Add a tag and press Enter"
         />
       </div>
 
-      {/* YouTube URL — only shown when published or later */}
-      {showYoutubeField && (
+      {/* Script — only shown for shorts */}
+      {isShort && (
         <div className="space-y-1.5">
-          <label className="text-sm font-medium text-muted-foreground">YouTube URL</label>
-          <input
+          <Label htmlFor="content-script">Script</Label>
+          <Textarea
+            id="content-script"
+            value={values.script ?? ''}
+            onChange={(e) => setValue('script', e.target.value)}
+            placeholder="Write your short-form script..."
+            rows={6}
+          />
+        </div>
+      )}
+
+      {/* Status (read-only) */}
+      <div className="space-y-1.5">
+        <Label>Status</Label>
+        <div>
+          <StatusBadge status={content.status} />
+        </div>
+      </div>
+
+      {/* YouTube URL — only shown when published or later */}
+      {showYoutubeUrl && (
+        <div className="space-y-1.5">
+          <Label htmlFor="content-youtube-url">YouTube URL</Label>
+          <Input
+            id="content-youtube-url"
             type="url"
-            value={youtubeUrl}
-            onChange={(e) => setYoutubeUrl(e.target.value)}
-            onBlur={handleYoutubeBlur}
+            value={values.youtubeUrl}
+            onChange={(e) => setValue('youtubeUrl', e.target.value)}
             placeholder="https://youtube.com/watch?v=..."
-            className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
           />
         </div>
       )}
 
       {/* Linked Content */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-muted-foreground">Linked Content</label>
-          {!showLinkForm && (
-            <button
-              onClick={() => setShowLinkForm(true)}
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Link
-            </button>
-          )}
-        </div>
+      <LinkedContentSection
+        contentId={content.id}
+        links={content.linkedContent}
+      />
 
-        {/* Existing links */}
-        {item.linkedContent.length > 0 && (
-          <div className="space-y-1.5">
-            {item.linkedContent.map((link) => (
-              <div
-                key={link.id}
-                className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
-              >
-                <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium capitalize">
-                  {link.platform}
-                </span>
-                <a
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 truncate text-primary hover:underline"
-                >
-                  {link.label}
-                  <ExternalLink className="ml-1 inline h-3 w-3" />
-                </a>
-                <button
-                  onClick={() => handleRemoveLink(link.id)}
-                  className="rounded p-0.5 text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove ${link.label}`}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add link form */}
-        {showLinkForm && (
-          <div className="space-y-2 rounded-md border p-3">
-            <Select
-              value={linkPlatform}
-              // Select onValueChange returns string, but values are constrained to PLATFORM_OPTIONS which are all LinkedContentPlatform
-              onValueChange={(v) => setLinkPlatform(v as LinkedContentPlatform)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PLATFORM_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <input
-              type="url"
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-            />
-            <input
-              type="text"
-              value={linkLabel}
-              onChange={(e) => setLinkLabel(e.target.value)}
-              placeholder="Link label"
-              className="w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-            />
-            {linkError && (
-              <p className="text-xs text-destructive">{linkError}</p>
-            )}
-            <div className="flex gap-2">
-              <button
-                onClick={handleAddLink}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-              >
-                Add
-              </button>
-              <button
-                onClick={() => {
-                  setShowLinkForm(false);
-                  setLinkError('');
-                }}
-                className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Platform Versions — only shown for shorts */}
+      {isShort && (
+        <PlatformVersionSection
+          contentId={content.id}
+          versions={content.platformVersions}
+        />
+      )}
 
       {/* Notes */}
       <div className="space-y-1.5">
-        <label className="text-sm font-medium text-muted-foreground">Notes</label>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          onBlur={() => handleBlur('notes', notes, item.notes)}
+        <Label htmlFor="content-notes">Notes</Label>
+        <Textarea
+          id="content-notes"
+          value={values.notes}
+          onChange={(e) => setValue('notes', e.target.value)}
           placeholder="Any additional notes..."
           rows={4}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
         />
       </div>
+
+      {/* Save / Discard */}
+      <FormActions
+        isDirty={isDirty}
+        saving={saving}
+        error={error}
+        onSave={save}
+        onDiscard={discard}
+      />
     </div>
   );
 }

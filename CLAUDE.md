@@ -3,7 +3,7 @@
 ## Project
 
 Personal YouTube content management app. Single-user, serverless, client-side only.
-Docs: `content-board-spec.md` (features), `tech-spec.md` (architecture).
+Docs: `../content-board-spec.md` (features), `../tech-spec.md` (architecture).
 
 ## Stack
 
@@ -36,7 +36,7 @@ All TypeScript interfaces live in `src/types/`. When the data model changes, upd
 
 ### Feature-Based Organization
 
-Each feature (auth, content, production, learn, feedback) is self-contained under `src/features/`. A feature owns its components, hooks, and logic. Cross-feature shared code goes in `src/components/common/` or `src/hooks/`. For the full file tree, see `tech-spec.md` § Project Structure.
+Each feature (auth, content, production, learn, feedback) is self-contained under `src/features/`. A feature owns its components, hooks, and logic. Cross-feature shared code goes in `src/components/common/` or `src/hooks/`. For the full file tree, see `../tech-spec.md` § Project Structure.
 
 ### State Management: React Context + useReducer
 

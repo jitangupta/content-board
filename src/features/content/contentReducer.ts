@@ -1,19 +1,16 @@
-import type { ContentAction } from '@/types/common.ts';
-import type { ContentItem } from '@/types/content.ts';
-import type { DataState } from '@/types/common.ts';
+import type { ContentAction, DataState } from '@/types/common';
+import type { ContentItem } from '@/types/content';
 
-export type ContentState = DataState<ContentItem[]>;
-
-export const initialContentState: ContentState = {
+export const initialContentState: DataState<ContentItem[]> = {
   data: [],
   loading: true,
   error: null,
 };
 
 export function contentReducer(
-  state: ContentState,
+  state: DataState<ContentItem[]>,
   action: ContentAction,
-): ContentState {
+): DataState<ContentItem[]> {
   switch (action.type) {
     case 'SET_CONTENTS':
       return { data: action.payload, loading: false, error: null };

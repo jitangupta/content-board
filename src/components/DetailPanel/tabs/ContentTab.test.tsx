@@ -1,44 +1,48 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import {
-  ContentContext,
-  type ContentContextValue,
-} from '@/features/content/ContentProvider';
 import { ContentTab } from '@/components/DetailPanel/tabs/ContentTab';
+import { useContent } from '@/features/content/useContent';
+import type { ContentContextValue } from '@/features/content/ContentContext';
 import type { ContentItem } from '@/types/content';
 
-vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
-  db: {},
+vi.mock('@/features/content/useContent');
+vi.mock('@/services/sentry', () => ({
+  captureError: vi.fn(),
 }));
-
 vi.mock('@/services/firestore', () => ({
-  addLinkedContent: vi.fn().mockResolvedValue(undefined),
-  removeLinkedContent: vi.fn().mockResolvedValue(undefined),
+  addLinkedContent: vi.fn(),
+  removeLinkedContent: vi.fn(),
+  addPlatformVersion: vi.fn(),
+  updatePlatformVersion: vi.fn(),
+  removePlatformVersion: vi.fn(),
 }));
 
-function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
+function makeContentItem(overrides: Partial<ContentItem> = {}): ContentItem {
   return {
-    id: 'item-1',
+    id: 'abc123',
     title: 'Test Video',
     description: 'A test description',
-    tags: ['react', 'typescript'],
+    tags: ['react', 'testing'],
     status: 'draft',
     phase: 'pre-production',
     order: 0,
+    contentType: 'video',
+    parentVideoId: null,
+    script: null,
+    platformVersions: [],
     youtubeUrl: null,
     demoItems: [],
     talkingPoints: [],
-    shootingScript: '',
-    thumbnailIdeas: [],
+    shootingScript: null,
+    thumbnailIdeas: null,
     linkedContent: [],
     notes: 'Some notes',
     learnings: [],
     feedback: [],
     timestamps: {
-      created: '2026-01-01',
+      created: '2024-01-01',
       technicallyReady: null,
       shootingScriptReady: null,
       readyToRecord: null,
@@ -47,136 +51,167 @@ function createMockItem(overrides: Partial<ContentItem> = {}): ContentItem {
       published: null,
       shortsExtracted: null,
       lifetimeValueEnds: null,
-      updated: '2026-01-01',
+      updated: '2024-01-01',
     },
     ...overrides,
   };
 }
 
-function renderContentTab(
-  item: ContentItem,
-  contextOverrides: Partial<ContentContextValue> = {},
-): ReturnType<typeof render> {
-  const defaultContext: ContentContextValue = {
-    contents: [item],
+const updateContentMock = vi.fn().mockResolvedValue(undefined);
+
+function mockUseContent(): void {
+  vi.mocked(useContent).mockReturnValue({
+    contents: [],
     loading: false,
     error: null,
     createContent: vi.fn(),
-    updateContent: vi.fn().mockResolvedValue(undefined),
-    deleteContent: vi.fn().mockResolvedValue(undefined),
+    updateContent: updateContentMock,
+    deleteContent: vi.fn(),
     updateStatus: vi.fn(),
-    ...contextOverrides,
-  };
+    reorderContents: vi.fn(),
+  } satisfies ContentContextValue);
+}
 
+function renderContentTab(content: ContentItem) {
   return render(
-    <ContentContext.Provider value={defaultContext}>
-      <MemoryRouter>
-        <ContentTab item={item} />
-      </MemoryRouter>
-    </ContentContext.Provider>,
+    <MemoryRouter>
+      <ContentTab content={content} />
+    </MemoryRouter>,
   );
 }
 
 describe('ContentTab', () => {
-  it('renders title field', () => {
-    renderContentTab(createMockItem());
-    expect(screen.getByDisplayValue('Test Video')).toBeInTheDocument();
+  beforeEach(() => {
+    mockUseContent();
+    updateContentMock.mockClear();
   });
 
-  it('renders description field', () => {
-    renderContentTab(createMockItem());
-    expect(screen.getByDisplayValue('A test description')).toBeInTheDocument();
-  });
+  it('renders all form fields', () => {
+    const content = makeContentItem();
+    renderContentTab(content);
 
-  it('renders tags', () => {
-    renderContentTab(createMockItem());
+    expect(screen.getByLabelText('Title')).toHaveValue('Test Video');
+    expect(screen.getByLabelText('Description')).toHaveValue(
+      'A test description',
+    );
     expect(screen.getByText('react')).toBeInTheDocument();
-    expect(screen.getByText('typescript')).toBeInTheDocument();
-  });
-
-  it('renders status badge', () => {
-    renderContentTab(createMockItem());
+    expect(screen.getByText('testing')).toBeInTheDocument();
     expect(screen.getByText('Draft')).toBeInTheDocument();
+    expect(screen.getByLabelText('Notes')).toHaveValue('Some notes');
   });
 
-  it('renders notes field', () => {
-    renderContentTab(createMockItem());
-    expect(screen.getByDisplayValue('Some notes')).toBeInTheDocument();
+  it('does not show YouTube URL for draft status', () => {
+    const content = makeContentItem({ status: 'draft' });
+    renderContentTab(content);
+
+    expect(screen.queryByLabelText('YouTube URL')).not.toBeInTheDocument();
   });
 
-  it('does not show YouTube URL field for draft status', () => {
-    renderContentTab(createMockItem({ status: 'draft' }));
-    expect(screen.queryByPlaceholderText(/youtube/i)).not.toBeInTheDocument();
+  it('shows YouTube URL for published status', () => {
+    const content = makeContentItem({
+      status: 'published',
+      phase: 'post-production',
+    });
+    renderContentTab(content);
+
+    expect(screen.getByLabelText('YouTube URL')).toBeInTheDocument();
   });
 
-  it('shows YouTube URL field for published status', () => {
-    renderContentTab(createMockItem({ status: 'published', phase: 'post-production' }));
-    expect(screen.getByPlaceholderText(/youtube/i)).toBeInTheDocument();
+  it('does not show Save/Discard when no changes are made', () => {
+    const content = makeContentItem();
+    renderContentTab(content);
+
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument();
   });
 
-  it('calls updateContent on title blur', async () => {
-    const updateContent = vi.fn().mockResolvedValue(undefined);
+  it('shows Save/Discard buttons when title is edited', async () => {
     const user = userEvent.setup();
-    renderContentTab(createMockItem(), { updateContent });
+    const content = makeContentItem();
+    renderContentTab(content);
 
-    const titleInput = screen.getByDisplayValue('Test Video');
+    const titleInput = screen.getByLabelText('Title');
     await user.clear(titleInput);
     await user.type(titleInput, 'New Title');
-    await user.tab();
 
-    expect(updateContent).toHaveBeenCalledWith('item-1', { title: 'New Title' });
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
   });
 
-  it('does not call updateContent if value unchanged on blur', async () => {
-    const updateContent = vi.fn().mockResolvedValue(undefined);
+  it('calls updateContent on Save click with changed title', async () => {
     const user = userEvent.setup();
-    renderContentTab(createMockItem(), { updateContent });
+    const content = makeContentItem();
+    renderContentTab(content);
 
-    const titleInput = screen.getByDisplayValue('Test Video');
-    await user.click(titleInput);
-    await user.tab();
+    const titleInput = screen.getByLabelText('Title');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'New Title');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    expect(updateContent).not.toHaveBeenCalled();
-  });
-
-  it('renders delete button', () => {
-    renderContentTab(createMockItem());
-    expect(screen.getByLabelText('Delete content')).toBeInTheDocument();
-  });
-
-  it('shows delete confirmation dialog', async () => {
-    const user = userEvent.setup();
-    renderContentTab(createMockItem());
-
-    await user.click(screen.getByLabelText('Delete content'));
-
-    expect(screen.getByText(/Delete "Test Video"\?/)).toBeInTheDocument();
-    expect(screen.getByText(/permanently delete/)).toBeInTheDocument();
-  });
-
-  it('renders Add Link button', () => {
-    renderContentTab(createMockItem());
-    expect(screen.getByText('Add Link')).toBeInTheDocument();
-  });
-
-  it('shows link form when Add Link is clicked', async () => {
-    const user = userEvent.setup();
-    renderContentTab(createMockItem());
-
-    await user.click(screen.getByText('Add Link'));
-
-    expect(screen.getByPlaceholderText('https://...')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Link label')).toBeInTheDocument();
-  });
-
-  it('renders existing linked content', () => {
-    const item = createMockItem({
-      linkedContent: [
-        { id: 'link-1', platform: 'blog', url: 'https://example.com', label: 'My Blog Post' },
-      ],
+    expect(updateContentMock).toHaveBeenCalledWith('abc123', {
+      title: 'New Title',
     });
-    renderContentTab(item);
-    expect(screen.getByText('My Blog Post')).toBeInTheDocument();
-    expect(screen.getByText('blog')).toBeInTheDocument();
+  });
+
+  it('calls updateContent on Save click with changed description', async () => {
+    const user = userEvent.setup();
+    const content = makeContentItem();
+    renderContentTab(content);
+
+    const descInput = screen.getByLabelText('Description');
+    await user.clear(descInput);
+    await user.type(descInput, 'New description');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(updateContentMock).toHaveBeenCalledWith('abc123', {
+      description: 'New description',
+    });
+  });
+
+  it('discards changes when Discard is clicked', async () => {
+    const user = userEvent.setup();
+    const content = makeContentItem();
+    renderContentTab(content);
+
+    const titleInput = screen.getByLabelText('Title');
+    await user.clear(titleInput);
+    await user.type(titleInput, 'New Title');
+
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+
+    expect(screen.getByLabelText('Title')).toHaveValue('Test Video');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(updateContentMock).not.toHaveBeenCalled();
+  });
+
+  it('calls updateContent when tags change (immediate save)', async () => {
+    const user = userEvent.setup();
+    const content = makeContentItem();
+    renderContentTab(content);
+
+    // Get the generic textbox that is the tag input (not title, description, or notes)
+    const inputs = screen.getAllByRole('textbox');
+    const chipInput = inputs.find(
+      (input) =>
+        !input.id ||
+        (!input.id.includes('title') &&
+          !input.id.includes('description') &&
+          !input.id.includes('notes')),
+    );
+    expect(chipInput).toBeDefined();
+    await user.type(chipInput!, 'newtag{Enter}');
+
+    expect(updateContentMock).toHaveBeenCalledWith('abc123', {
+      tags: ['react', 'testing', 'newtag'],
+    });
+  });
+
+  it('shows linked content section', () => {
+    const content = makeContentItem();
+    renderContentTab(content);
+
+    expect(screen.getByText('Linked Content')).toBeInTheDocument();
+    expect(screen.getByText('No linked content yet')).toBeInTheDocument();
   });
 });

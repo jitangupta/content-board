@@ -1,104 +1,76 @@
-import type { ContentItem } from '@/types/content';
-import { useProduction } from '@/features/production/useProduction';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { FormActions } from '@/components/common/FormActions';
 import { DemoItemList } from '@/features/production/DemoItemList';
 import { TalkingPointList } from '@/features/production/TalkingPointList';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import type { ContentItem } from '@/types/content';
 
 interface ProductionTabProps {
-  item: ContentItem;
+  content: ContentItem;
 }
 
-export function ProductionTab({ item }: ProductionTabProps) {
-  const {
-    showDemoForm,
-    setShowDemoForm,
-    demoType,
-    setDemoType,
-    demoDescription,
-    setDemoDescription,
-    demoError,
-    handleAddDemoItem,
-    handleToggleDemoVerified,
-    handleRemoveDemoItem,
+const NULLABLE_FIELDS = ['shootingScript', 'thumbnailIdeas'];
 
-    showTalkingPointForm,
-    setShowTalkingPointForm,
-    talkingPointText,
-    setTalkingPointText,
-    talkingPointCategory,
-    setTalkingPointCategory,
-    talkingPointPriority,
-    setTalkingPointPriority,
-    talkingPointError,
-    handleAddTalkingPoint,
-    handleRemoveTalkingPoint,
+export function ProductionTab({ content }: ProductionTabProps) {
+  const isShort = content.contentType === 'short';
 
-    shootingScript,
-    setShootingScript,
-    handleShootingScriptBlur,
-
-    thumbnailIdeas,
-    setThumbnailIdeas,
-    handleThumbnailIdeasBlur,
-  } = useProduction(item);
+  const { values, setValue, isDirty, save, discard, saving, error } =
+    useFormDraft({
+      contentId: content.id,
+      initialValues: isShort
+        ? {}
+        : {
+            shootingScript: content.shootingScript ?? '',
+            thumbnailIdeas: content.thumbnailIdeas ?? '',
+          },
+      nullableFields: isShort ? [] : NULLABLE_FIELDS,
+    });
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6 py-4">
       {/* Demo Items */}
-      <DemoItemList
-        items={item.demoItems}
-        showForm={showDemoForm}
-        setShowForm={setShowDemoForm}
-        demoType={demoType}
-        setDemoType={setDemoType}
-        demoDescription={demoDescription}
-        setDemoDescription={setDemoDescription}
-        demoError={demoError}
-        onAdd={handleAddDemoItem}
-        onToggleVerified={handleToggleDemoVerified}
-        onRemove={handleRemoveDemoItem}
-      />
+      <DemoItemList contentId={content.id} items={content.demoItems} />
 
       {/* Talking Points */}
-      <TalkingPointList
-        points={item.talkingPoints}
-        showForm={showTalkingPointForm}
-        setShowForm={setShowTalkingPointForm}
-        text={talkingPointText}
-        setText={setTalkingPointText}
-        category={talkingPointCategory}
-        setCategory={setTalkingPointCategory}
-        priority={talkingPointPriority}
-        setPriority={setTalkingPointPriority}
-        error={talkingPointError}
-        onAdd={handleAddTalkingPoint}
-        onRemove={handleRemoveTalkingPoint}
+      <TalkingPointList contentId={content.id} points={content.talkingPoints} />
+
+      {/* Shooting Script — videos only */}
+      {!isShort && (
+        <div className="space-y-1.5">
+          <Label htmlFor="shooting-script">Shooting Script</Label>
+          <Textarea
+            id="shooting-script"
+            value={values.shootingScript ?? ''}
+            onChange={(e) => setValue('shootingScript', e.target.value)}
+            placeholder="Outline your scene-by-scene flow..."
+            rows={6}
+          />
+        </div>
+      )}
+
+      {/* Thumbnail Ideas — videos only */}
+      {!isShort && (
+        <div className="space-y-1.5">
+          <Label htmlFor="thumbnail-ideas">Thumbnail Ideas</Label>
+          <Textarea
+            id="thumbnail-ideas"
+            value={values.thumbnailIdeas ?? ''}
+            onChange={(e) => setValue('thumbnailIdeas', e.target.value)}
+            placeholder="Describe visual concepts for your thumbnail..."
+            rows={4}
+          />
+        </div>
+      )}
+
+      {/* Save / Discard */}
+      <FormActions
+        isDirty={isDirty}
+        saving={saving}
+        error={error}
+        onSave={save}
+        onDiscard={discard}
       />
-
-      {/* Shooting Script */}
-      <div className="space-y-1.5">
-        <h3 className="text-sm font-medium">Shooting Script</h3>
-        <textarea
-          value={shootingScript}
-          onChange={(e) => setShootingScript(e.target.value)}
-          onBlur={handleShootingScriptBlur}
-          placeholder="Outline your scene-by-scene flow..."
-          rows={6}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-        />
-      </div>
-
-      {/* Thumbnail Ideas */}
-      <div className="space-y-1.5">
-        <h3 className="text-sm font-medium">Thumbnail Ideas</h3>
-        <textarea
-          value={thumbnailIdeas}
-          onChange={(e) => setThumbnailIdeas(e.target.value)}
-          onBlur={handleThumbnailIdeasBlur}
-          placeholder="Describe visual concepts for thumbnails (one per line)..."
-          rows={4}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-        />
-      </div>
     </div>
   );
 }

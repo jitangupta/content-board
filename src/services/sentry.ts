@@ -1,7 +1,5 @@
 import * as Sentry from '@sentry/react';
 
-export const SentryErrorBoundary = Sentry.ErrorBoundary;
-
 export function initSentry(): void {
   Sentry.init({
     dsn: 'https://59514916cb8841480f3605d6a10297f1@o4510924067045376.ingest.us.sentry.io/4510924073533440',
@@ -50,3 +48,5 @@ export function setUserContext(email: string): void {
 export function clearUserContext(): void {
   Sentry.setUser(null);
 }
+
+export const SentryErrorBoundary = Sentry.ErrorBoundary;

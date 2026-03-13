@@ -3,9 +3,9 @@ import { render, screen } from '@testing-library/react';
 import { TimestampTimeline } from '@/components/DetailPanel/TimestampTimeline';
 import type { ContentTimestamps } from '@/types/content';
 
-function createTimestamps(overrides: Partial<ContentTimestamps> = {}): ContentTimestamps {
+function makeTimestamps(overrides: Partial<ContentTimestamps> = {}): ContentTimestamps {
   return {
-    created: '2026-01-01T00:00:00Z',
+    created: '2024-01-01T00:00:00.000Z',
     technicallyReady: null,
     shootingScriptReady: null,
     readyToRecord: null,
@@ -14,58 +14,87 @@ function createTimestamps(overrides: Partial<ContentTimestamps> = {}): ContentTi
     published: null,
     shortsExtracted: null,
     lifetimeValueEnds: null,
-    updated: '2026-01-01T00:00:00Z',
+    updated: '2024-01-01T00:00:00.000Z',
     ...overrides,
   };
 }
 
 describe('TimestampTimeline', () => {
-  it('renders nothing when no timestamps are set', () => {
-    const { container } = render(
-      <TimestampTimeline timestamps={createTimestamps()} />,
-    );
-    expect(container.firstChild).toBeNull();
+  it('renders the created timestamp', () => {
+    render(<TimestampTimeline contentType="video" timestamps={makeTimestamps()} />);
+
+    expect(screen.getByText('Created')).toBeInTheDocument();
+    expect(screen.getByText(/Jan 1, 2024/)).toBeInTheDocument();
   });
 
-  it('displays a completed timestamp', () => {
+  it('renders completed status timestamps', () => {
     render(
       <TimestampTimeline
-        timestamps={createTimestamps({
-          technicallyReady: '2026-01-15T10:00:00Z',
+        contentType="video"
+        timestamps={makeTimestamps({
+          technicallyReady: '2024-01-05T00:00:00.000Z',
+          shootingScriptReady: '2024-01-10T00:00:00.000Z',
         })}
       />,
     );
-    expect(screen.getByText('Technically Ready')).toBeInTheDocument();
-    expect(screen.getByText(/Jan/)).toBeInTheDocument();
-    expect(screen.getByText(/15/)).toBeInTheDocument();
-    expect(screen.getByText(/2026/)).toBeInTheDocument();
-  });
 
-  it('displays multiple completed timestamps in status order', () => {
-    render(
-      <TimestampTimeline
-        timestamps={createTimestamps({
-          technicallyReady: '2026-01-15T10:00:00Z',
-          shootingScriptReady: '2026-01-20T10:00:00Z',
-          readyToRecord: '2026-02-01T10:00:00Z',
-        })}
-      />,
-    );
     expect(screen.getByText('Technically Ready')).toBeInTheDocument();
     expect(screen.getByText('Shooting Script Ready')).toBeInTheDocument();
-    expect(screen.getByText('Ready to Record')).toBeInTheDocument();
   });
 
-  it('skips timestamps with null values', () => {
+  it('does not render null timestamps', () => {
     render(
       <TimestampTimeline
-        timestamps={createTimestamps({
-          technicallyReady: '2026-01-15T10:00:00Z',
-          recorded: null,
+        contentType="video"
+        timestamps={makeTimestamps({
+          technicallyReady: '2024-01-05T00:00:00.000Z',
         })}
       />,
     );
-    expect(screen.getByText('Technically Ready')).toBeInTheDocument();
+
     expect(screen.queryByText('Recorded')).not.toBeInTheDocument();
+    expect(screen.queryByText('Published')).not.toBeInTheDocument();
+  });
+
+  it('returns null when no timestamps have values', () => {
+    const timestamps: ContentTimestamps = {
+      created: '',
+      technicallyReady: null,
+      shootingScriptReady: null,
+      readyToRecord: null,
+      recorded: null,
+      edited: null,
+      published: null,
+      shortsExtracted: null,
+      lifetimeValueEnds: null,
+      updated: '',
+    };
+
+    const { container } = render(<TimestampTimeline contentType="video" timestamps={timestamps} />);
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('renders timestamps in lifecycle order', () => {
+    render(
+      <TimestampTimeline
+        contentType="video"
+        timestamps={makeTimestamps({
+          technicallyReady: '2024-01-05T00:00:00.000Z',
+          recorded: '2024-01-20T00:00:00.000Z',
+          published: '2024-02-01T00:00:00.000Z',
+        })}
+      />,
+    );
+
+    const timeline = screen.getByTestId('timestamp-timeline');
+    const labels = timeline.querySelectorAll('.font-medium');
+    const labelTexts = Array.from(labels).map((el) => el.textContent);
+
+    expect(labelTexts).toEqual([
+      'Created',
+      'Technically Ready',
+      'Recorded',
+      'Published',
+    ]);
   });
 });

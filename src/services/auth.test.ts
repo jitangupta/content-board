@@ -1,107 +1,109 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { User, Unsubscribe } from '@/services/auth';
-
-const mockSignInWithPopup = vi.fn();
-const mockFirebaseSignOut = vi.fn();
-const mockFirebaseOnAuthStateChanged = vi.fn();
+import type { Mock } from 'vitest';
+import {
+  signInWithGoogle,
+  signOut,
+  onAuthStateChanged,
+  isAuthorizedUser,
+  ALLOWED_EMAIL,
+} from '@/services/auth';
 
 vi.mock('firebase/auth', () => ({
   GoogleAuthProvider: vi.fn(),
-  signInWithPopup: (...args: unknown[]) => mockSignInWithPopup(...args),
-  signOut: (...args: unknown[]) => mockFirebaseSignOut(...args),
-  onAuthStateChanged: (...args: unknown[]) =>
-    mockFirebaseOnAuthStateChanged(...args),
+  signInWithPopup: vi.fn(),
+  signOut: vi.fn(),
+  onAuthStateChanged: vi.fn(),
 }));
 
 vi.mock('@/services/firebase', () => ({
-  auth: { currentUser: null },
+  auth: {},
 }));
-
-const mockSetUserContext = vi.fn();
-const mockClearUserContext = vi.fn();
-const mockAddBreadcrumb = vi.fn();
 
 vi.mock('@/services/sentry', () => ({
-  setUserContext: (...args: unknown[]) => mockSetUserContext(...args),
-  clearUserContext: (...args: unknown[]) => mockClearUserContext(...args),
-  addBreadcrumb: (...args: unknown[]) => mockAddBreadcrumb(...args),
+  setUserContext: vi.fn(),
+  clearUserContext: vi.fn(),
+  addBreadcrumb: vi.fn(),
+  captureError: vi.fn(),
 }));
+
+import { signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged as firebaseOnAuthStateChanged } from 'firebase/auth';
+import { setUserContext, clearUserContext, addBreadcrumb, captureError } from '@/services/sentry';
 
 describe('auth service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
+  describe('isAuthorizedUser', () => {
+    it('returns true for allowed email', () => {
+      expect(isAuthorizedUser(ALLOWED_EMAIL)).toBe(true);
+    });
+
+    it('returns false for other emails', () => {
+      expect(isAuthorizedUser('other@example.com')).toBe(false);
+    });
+
+    it('returns false for null', () => {
+      expect(isAuthorizedUser(null)).toBe(false);
+    });
+  });
+
   describe('signInWithGoogle', () => {
-    it('calls signInWithPopup and sets Sentry user context', async () => {
-      const mockUser = { email: 'test@example.com' } as User;
-      mockSignInWithPopup.mockResolvedValue({ user: mockUser });
+    it('calls signInWithPopup and sets user context', async () => {
+      (signInWithPopup as Mock).mockResolvedValue({
+        user: { email: 'test@example.com' },
+      });
 
-      const { signInWithGoogle } = await import('@/services/auth');
-      const result = await signInWithGoogle();
+      await signInWithGoogle();
 
-      expect(mockSignInWithPopup).toHaveBeenCalledOnce();
-      expect(mockSetUserContext).toHaveBeenCalledWith('test@example.com');
-      expect(mockAddBreadcrumb).toHaveBeenCalledWith(
+      expect(signInWithPopup).toHaveBeenCalledOnce();
+      expect(setUserContext).toHaveBeenCalledWith('test@example.com');
+      expect(addBreadcrumb).toHaveBeenCalledWith(
         'auth',
-        'User signed in',
+        'User signed in with Google',
         { email: 'test@example.com' },
       );
-      expect(result).toBe(mockUser);
+    });
+
+    it('captures error and re-throws on failure', async () => {
+      const error = new Error('popup closed');
+      (signInWithPopup as Mock).mockRejectedValue(error);
+
+      await expect(signInWithGoogle()).rejects.toThrow('popup closed');
+      expect(captureError).toHaveBeenCalledWith(error, { action: 'sign-in' });
     });
   });
 
   describe('signOut', () => {
-    it('calls Firebase signOut and clears Sentry user context', async () => {
-      mockFirebaseSignOut.mockResolvedValue(undefined);
+    it('clears user context and calls firebaseSignOut', async () => {
+      (firebaseSignOut as Mock).mockResolvedValue(undefined);
 
-      const { signOut } = await import('@/services/auth');
       await signOut();
 
-      expect(mockFirebaseSignOut).toHaveBeenCalledOnce();
-      expect(mockClearUserContext).toHaveBeenCalledOnce();
-      expect(mockAddBreadcrumb).toHaveBeenCalledWith(
-        'auth',
-        'User signed out',
-      );
+      expect(addBreadcrumb).toHaveBeenCalledWith('auth', 'User signed out');
+      expect(clearUserContext).toHaveBeenCalledOnce();
+      expect(firebaseSignOut).toHaveBeenCalledOnce();
+    });
+
+    it('captures error and re-throws on failure', async () => {
+      const error = new Error('sign-out failed');
+      (firebaseSignOut as Mock).mockRejectedValue(error);
+
+      await expect(signOut()).rejects.toThrow('sign-out failed');
+      expect(captureError).toHaveBeenCalledWith(error, { action: 'sign-out' });
     });
   });
 
   describe('onAuthStateChanged', () => {
-    it('sets user context when user is present', async () => {
-      const mockUser = { email: 'test@example.com' } as User;
-      const mockUnsubscribe: Unsubscribe = vi.fn();
-      mockFirebaseOnAuthStateChanged.mockImplementation(
-        (_auth: unknown, callback: (user: User | null) => void) => {
-          callback(mockUser);
-          return mockUnsubscribe;
-        },
-      );
-
-      const { onAuthStateChanged } = await import('@/services/auth');
+    it('wraps Firebase onAuthStateChanged and returns unsubscribe', () => {
+      const mockUnsubscribe = vi.fn();
+      (firebaseOnAuthStateChanged as Mock).mockReturnValue(mockUnsubscribe);
       const callback = vi.fn();
-      const unsub = onAuthStateChanged(callback);
 
-      expect(mockSetUserContext).toHaveBeenCalledWith('test@example.com');
-      expect(callback).toHaveBeenCalledWith(mockUser);
-      expect(unsub).toBe(mockUnsubscribe);
-    });
+      const unsubscribe = onAuthStateChanged(callback);
 
-    it('clears user context when user is null', async () => {
-      const mockUnsubscribe: Unsubscribe = vi.fn();
-      mockFirebaseOnAuthStateChanged.mockImplementation(
-        (_auth: unknown, callback: (user: User | null) => void) => {
-          callback(null);
-          return mockUnsubscribe;
-        },
-      );
-
-      const { onAuthStateChanged } = await import('@/services/auth');
-      const callback = vi.fn();
-      onAuthStateChanged(callback);
-
-      expect(mockClearUserContext).toHaveBeenCalledOnce();
-      expect(callback).toHaveBeenCalledWith(null);
+      expect(firebaseOnAuthStateChanged).toHaveBeenCalledOnce();
+      expect(unsubscribe).toBe(mockUnsubscribe);
     });
   });
 });

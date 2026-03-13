@@ -1,8 +1,7 @@
-import { Plus, Pencil, Trash2, X } from 'lucide-react';
-import type { ContentItem, Learning } from '@/types/content';
-import { useContent } from '@/features/content/useContent';
-import { useLearnings } from '@/features/learn/useLearnings';
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Pencil, Plus, Trash2, ExternalLink } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useContent } from '@/features/content/useContent';
+import { useLearnings } from '@/features/learn/useLearnings';
+import type { ContentItem, Learning } from '@/types/content';
+
+interface LearningListProps {
+  content: ContentItem;
+  onNavigateToContent: (contentId: string) => void;
+}
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -28,273 +35,276 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
   year: 'numeric',
 });
 
-function formatDate(isoDate: string): string {
-  return dateFormatter.format(new Date(isoDate));
+function formatDate(dateString: string): string {
+  return dateFormatter.format(new Date(dateString));
 }
 
-interface LearningListProps {
-  item: ContentItem;
+function generateId(): string {
+  return crypto.randomUUID();
 }
 
-export function LearningList({ item }: LearningListProps) {
-  const { contents } = useContent();
-  const navigate = useNavigate();
-  const {
-    showAddForm,
-    setShowAddForm,
-    newText,
-    setNewText,
-    editingId,
-    editText,
-    setEditText,
-    handleAdd,
-    handleStartEdit,
-    handleCancelEdit,
-    handleSaveEdit,
-    handleDelete,
-    handleAppliedInChange,
-  } = useLearnings(item);
-
-  const otherContents = contents.filter((c) => c.id !== item.id);
-
-  function getContentTitle(contentId: string): string {
-    const content = contents.find((c) => c.id === contentId);
-    return content?.title || 'Untitled';
-  }
-
-  function handleNavigateToContent(contentId: string): void {
-    navigate(`/content/${contentId}/learn`);
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Header with Add button */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">Learnings</h3>
-        {!showAddForm && (
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add Learning
-          </button>
-        )}
-      </div>
-
-      {/* Add form */}
-      {showAddForm && (
-        <div className="space-y-2 rounded-md border p-3">
-          <textarea
-            value={newText}
-            onChange={(e) => setNewText(e.target.value)}
-            placeholder="What did you learn?"
-            rows={3}
-            className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={handleAdd}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Save
-            </button>
-            <button
-              onClick={() => {
-                setShowAddForm(false);
-                setNewText('');
-              }}
-              className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {item.learnings.length === 0 && !showAddForm && (
-        <p className="py-8 text-center text-sm text-muted-foreground">
-          No learnings yet. Capture what you learned while creating this video.
-        </p>
-      )}
-
-      {/* Learnings list */}
-      {item.learnings.length > 0 && (
-        <div className="space-y-3">
-          {item.learnings.map((learning) => (
-            <LearningItem
-              key={learning.id}
-              learning={learning}
-              isEditing={editingId === learning.id}
-              editText={editText}
-              setEditText={setEditText}
-              otherContents={otherContents}
-              getContentTitle={getContentTitle}
-              onStartEdit={handleStartEdit}
-              onCancelEdit={handleCancelEdit}
-              onSaveEdit={handleSaveEdit}
-              onDelete={handleDelete}
-              onAppliedInChange={handleAppliedInChange}
-              onNavigateToContent={handleNavigateToContent}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface LearningItemProps {
-  learning: Learning;
-  isEditing: boolean;
-  editText: string;
-  setEditText: (value: string) => void;
-  otherContents: ContentItem[];
-  getContentTitle: (contentId: string) => string;
-  onStartEdit: (learning: Learning) => void;
-  onCancelEdit: () => void;
-  onSaveEdit: (learning: Learning) => Promise<void>;
-  onDelete: (learningId: string) => Promise<void>;
-  onAppliedInChange: (learning: Learning, contentId: string | null) => Promise<void>;
-  onNavigateToContent: (contentId: string) => void;
-}
-
-function LearningItem({
-  learning,
-  isEditing,
-  editText,
-  setEditText,
-  otherContents,
-  getContentTitle,
-  onStartEdit,
-  onCancelEdit,
-  onSaveEdit,
-  onDelete,
-  onAppliedInChange,
+export function LearningList({
+  content,
   onNavigateToContent,
-}: LearningItemProps) {
-  if (isEditing) {
+}: LearningListProps) {
+  const { contents } = useContent();
+  const { add, update, remove } = useLearnings();
+
+  const [isAdding, setIsAdding] = useState(false);
+  const [newText, setNewText] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const otherContents = contents.filter((c) => c.id !== content.id);
+
+  async function handleAdd(): Promise<void> {
+    const trimmed = newText.trim();
+    if (!trimmed) return;
+
+    setSaving(true);
+    try {
+      const learning: Learning = {
+        id: generateId(),
+        text: trimmed,
+        dateAdded: new Date().toISOString(),
+        appliedInContentId: null,
+      };
+      await add(content.id, learning);
+      setNewText('');
+      setIsAdding(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function startEdit(learning: Learning): void {
+    setEditingId(learning.id);
+    setEditText(learning.text);
+  }
+
+  async function handleSaveEdit(learning: Learning): Promise<void> {
+    const trimmed = editText.trim();
+    if (!trimmed || trimmed === learning.text) {
+      setEditingId(null);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await update(content.id, { ...learning, text: trimmed });
+      setEditingId(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(learningId: string): Promise<void> {
+    setSaving(true);
+    try {
+      await remove(content.id, learningId);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAppliedInChange(
+    learning: Learning,
+    value: string,
+  ): Promise<void> {
+    const appliedInContentId = value === 'none' ? null : value;
+    await update(content.id, { ...learning, appliedInContentId });
+  }
+
+  function getAppliedInTitle(contentId: string): string | undefined {
+    return contents.find((c) => c.id === contentId)?.title;
+  }
+
+  if (content.learnings.length === 0 && !isAdding) {
     return (
-      <div className="space-y-2 rounded-md border p-3">
-        <textarea
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
-          rows={3}
-          className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
-          autoFocus
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={() => onSaveEdit(learning)}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Save
-          </button>
-          <button
-            onClick={onCancelEdit}
-            className="rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
+      <div className="space-y-4">
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+          <p className="mb-1 text-sm">No learnings yet.</p>
+          <p className="text-xs">
+            Capture what you learned while creating this video.
+          </p>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsAdding(true)}
+          className="gap-1.5"
+        >
+          <Plus className="h-4 w-4" />
+          Add Learning
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="rounded-md border p-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="flex-1 text-sm">{learning.text}</p>
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            onClick={() => onStartEdit(learning)}
-            className="rounded p-1 text-muted-foreground hover:text-foreground"
-            aria-label="Edit learning"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <button
-                className="rounded p-1 text-muted-foreground hover:text-destructive"
-                aria-label="Delete learning"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this learning?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently remove this learning. This cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => onDelete(learning.id)}
-                  className="bg-destructive text-white hover:bg-destructive/90"
+    <div className="space-y-3">
+      {/* Learning items */}
+      {content.learnings.map((learning) => (
+        <div
+          key={learning.id}
+          className="rounded-lg border p-3 space-y-2"
+        >
+          {editingId === learning.id ? (
+            /* Edit mode */
+            <div className="space-y-2">
+              <Textarea
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                rows={3}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => handleSaveEdit(learning)}
+                  disabled={saving}
                 >
-                  Delete
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </div>
-
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
-          {formatDate(learning.dateAdded)}
-        </span>
-
-        <div className="flex items-center gap-1.5">
-          {learning.appliedInContentId ? (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">Applied in:</span>
-              <button
-                onClick={() => {
-                  if (learning.appliedInContentId) {
-                    onNavigateToContent(learning.appliedInContentId);
-                  }
-                }}
-                className="text-xs text-primary hover:underline"
-              >
-                {getContentTitle(learning.appliedInContentId)}
-              </button>
-              <button
-                onClick={() => onAppliedInChange(learning, null)}
-                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-                aria-label="Remove applied-in link"
-              >
-                <X className="h-3 w-3" />
-              </button>
+                  Save
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setEditingId(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
           ) : (
-            <Select
-              onValueChange={(value) => onAppliedInChange(learning, value)}
-            >
-              <SelectTrigger className="h-7 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground">
-                <SelectValue placeholder="Applied in..." />
-              </SelectTrigger>
-              <SelectContent>
-                {otherContents.map((content) => (
-                  <SelectItem key={content.id} value={content.id}>
-                    {content.title || 'Untitled'}
-                  </SelectItem>
-                ))}
-                {otherContents.length === 0 && (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    No other content items
-                  </div>
+            /* View mode */
+            <>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm whitespace-pre-wrap">{learning.text}</p>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => startEdit(learning)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete learning?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This learning will be permanently removed.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDelete(learning.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span>{formatDate(learning.dateAdded)}</span>
+
+                {learning.appliedInContentId && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:underline"
+                    onClick={() =>
+                      onNavigateToContent(learning.appliedInContentId!)
+                    }
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    {getAppliedInTitle(learning.appliedInContentId) ||
+                      'Linked content'}
+                  </button>
                 )}
-              </SelectContent>
-            </Select>
+              </div>
+
+              {/* Applied in selector */}
+              <div className="pt-1">
+                <Select
+                  value={learning.appliedInContentId ?? 'none'}
+                  onValueChange={(value) =>
+                    handleAppliedInChange(learning, value)
+                  }
+                >
+                  <SelectTrigger className="h-8 w-full text-xs">
+                    <SelectValue placeholder="Applied in..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not applied</SelectItem>
+                    {otherContents.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.title || 'Untitled'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
           )}
         </div>
-      </div>
+      ))}
+
+      {/* Inline add form */}
+      {isAdding && (
+        <div className="rounded-lg border border-dashed p-3 space-y-2">
+          <Textarea
+            value={newText}
+            onChange={(e) => setNewText(e.target.value)}
+            placeholder="What did you learn?"
+            rows={3}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleAdd} disabled={saving || !newText.trim()}>
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setIsAdding(false);
+                setNewText('');
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Add button */}
+      {!isAdding && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setIsAdding(true)}
+          className="gap-1.5"
+        >
+          <Plus className="h-4 w-4" />
+          Add Learning
+        </Button>
+      )}
     </div>
   );
 }
