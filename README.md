@@ -4,6 +4,14 @@ Personal YouTube content management app for tracking ideas from draft to publica
 
 ![React](https://img.shields.io/badge/React-19-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) ![Firebase](https://img.shields.io/badge/Firebase-Firestore%20%2B%20Auth%20%2B%20Hosting-orange) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4) ![PWA](https://img.shields.io/badge/PWA-installable-brightgreen)
 
+## Watch the Build Process
+
+This project is part of a video series on building production-grade software with AI:
+
+1. [Engineering Claude Code for Production — Beyond Prompting](https://www.youtube.com/watch?v=7JVA1LjRNAw) — how `CLAUDE.md`, custom commands, and skills files turn Claude Code into a disciplined engineering partner
+2. [AI Code Review: 5 Checks Before You Merge](https://www.youtube.com/watch?v=mP4igQr2R0E) — the review workflow used in this project's CI pipeline
+3. [Run 3 AI Agents at Once — Git Worktree Workflow](https://www.youtube.com/watch?v=yJWw4HAEqG0) — parallelizing development with Claude Code agents in isolated worktrees
+
 ## What It Does
 
 Content Board tracks YouTube video ideas through a 9-stage lifecycle grouped into 3 phases:
@@ -120,7 +128,22 @@ npm install
 npm run dev
 ```
 
-### 6. Deploy
+### 6. Seed Sample Data (Optional)
+
+Load 5 sample content items across different lifecycle stages to see the app in action:
+
+1. Generate a Firebase Admin SDK service account key:
+   Firebase Console → Project Settings → Service accounts → **Generate new private key**
+2. Save it as `seed/serviceAccountKey.json` (this file is gitignored)
+3. Run the seed script:
+
+```bash
+npx tsx seed/import.ts
+```
+
+This creates sample videos in Draft, Technically Ready, Shooting Script Ready, Recorded, and Published stages — with demo items, talking points, learnings, and feedback attached.
+
+### 7. Deploy
 
 Install the Firebase CLI and deploy:
 

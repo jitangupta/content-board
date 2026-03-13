@@ -11,6 +11,7 @@ dist
 
 # Firebase
 .firebase
+seed/serviceAccountKey.json
 
 # Testing
 coverage

@@ -1,0 +1,341 @@
+[
+  {
+    "title": "Kubernetes Pod Networking Deep Dive",
+    "description": "Explain how pod-to-pod communication works in Kubernetes — CNI plugins, overlay networks, and Service routing. Visual walkthrough with a live cluster.",
+    "tags": ["kubernetes", "networking", "cni", "deep-dive"],
+    "status": "published",
+    "phase": "post-production",
+    "order": 0,
+    "contentType": "video",
+    "parentVideoId": null,
+    "script": null,
+    "platformVersions": [],
+    "youtubeUrl": "https://www.youtube.com/watch?v=example1",
+    "demoItems": [
+      {
+        "id": "demo-1a",
+        "type": "live-coding",
+        "description": "Spin up a 3-node kind cluster and trace packets between pods using tcpdump",
+        "verified": true
+      },
+      {
+        "id": "demo-1b",
+        "type": "command",
+        "description": "kubectl exec into pods and curl across namespaces to show Service DNS resolution",
+        "verified": true
+      }
+    ],
+    "talkingPoints": [
+      {
+        "id": "tp-1a",
+        "text": "Every pod gets its own IP — no NAT between pods",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 0
+      },
+      {
+        "id": "tp-1b",
+        "text": "CNI plugins are swappable — Calico, Flannel, Cilium each solve it differently",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 1
+      },
+      {
+        "id": "tp-1c",
+        "text": "Subscribe for the upcoming Service Mesh video",
+        "category": "cta",
+        "priority": "nice-to-have",
+        "order": 2
+      }
+    ],
+    "shootingScript": "1. Intro — why networking is the #1 confusing topic in K8s\n2. Whiteboard: pod IP assignment, node CIDR ranges\n3. Demo: kind cluster, deploy two pods, curl between them\n4. Explain CNI plugin role with Calico example\n5. Service abstraction — ClusterIP, kube-proxy, iptables\n6. Demo: create a Service, trace DNS resolution\n7. Recap and next video teaser (Service Mesh)",
+    "thumbnailIdeas": "Split screen: left side shows a tangled network diagram, right side shows clean pod-to-pod arrows. Text overlay: \"How Pods Actually Talk\"",
+    "linkedContent": [
+      {
+        "id": "lc-1a",
+        "platform": "blog",
+        "url": "https://example.com/blog/k8s-networking",
+        "label": "Companion blog post"
+      }
+    ],
+    "notes": "Keep the CNI comparison short — viewers drop off during theory-heavy sections. Focus on the live demo.",
+    "learnings": [
+      {
+        "id": "learn-1a",
+        "text": "Live terminal demos need larger font size (at least 18pt) — got comments about readability",
+        "dateAdded": "2025-02-15T10:00:00.000Z",
+        "appliedInContentId": null
+      },
+      {
+        "id": "learn-1b",
+        "text": "Whiteboard diagrams before live demos help viewers follow along — retention was higher in sections with visual prep",
+        "dateAdded": "2025-02-20T14:30:00.000Z",
+        "appliedInContentId": null
+      }
+    ],
+    "feedback": [
+      {
+        "id": "fb-1a",
+        "source": "comment",
+        "text": "Best networking explanation I've seen — the live demo made it click",
+        "dateAdded": "2025-03-01T09:00:00.000Z"
+      },
+      {
+        "id": "fb-1b",
+        "source": "self",
+        "text": "Should have shown a network policy example — missed opportunity to connect to security",
+        "dateAdded": "2025-02-25T16:00:00.000Z"
+      }
+    ],
+    "timestamps": {
+      "created": "2025-01-10T08:00:00.000Z",
+      "technicallyReady": "2025-01-15T12:00:00.000Z",
+      "shootingScriptReady": "2025-01-20T10:00:00.000Z",
+      "readyToRecord": "2025-01-22T09:00:00.000Z",
+      "recorded": "2025-01-25T14:00:00.000Z",
+      "edited": "2025-02-01T18:00:00.000Z",
+      "published": "2025-02-10T16:00:00.000Z",
+      "shortsExtracted": null,
+      "lifetimeValueEnds": null,
+      "updated": "2025-03-01T09:00:00.000Z"
+    }
+  },
+  {
+    "title": "Terraform State Management — Remote Backends & Locking",
+    "description": "Walk through why local state breaks in teams, how to configure S3 + DynamoDB backend, and state locking to prevent corruption.",
+    "tags": ["terraform", "iac", "aws", "state-management"],
+    "status": "recorded",
+    "phase": "production",
+    "order": 0,
+    "contentType": "video",
+    "parentVideoId": null,
+    "script": null,
+    "platformVersions": [],
+    "youtubeUrl": null,
+    "demoItems": [
+      {
+        "id": "demo-2a",
+        "type": "config-file",
+        "description": "backend.tf with S3 bucket and DynamoDB table configuration",
+        "verified": true
+      },
+      {
+        "id": "demo-2b",
+        "type": "live-coding",
+        "description": "Simulate a state lock conflict by running terraform apply from two terminals",
+        "verified": false
+      }
+    ],
+    "talkingPoints": [
+      {
+        "id": "tp-2a",
+        "text": "Local state is a ticking time bomb for teams — one overwrite and you're in trouble",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 0
+      },
+      {
+        "id": "tp-2b",
+        "text": "DynamoDB locking is cheap (pennies/month) and prevents state corruption",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 1
+      },
+      {
+        "id": "tp-2c",
+        "text": "If this saves you from a state corruption incident, drop a like",
+        "category": "engagement",
+        "priority": "nice-to-have",
+        "order": 2
+      }
+    ],
+    "shootingScript": "1. Intro — \"I've seen teams lose entire infrastructure state files\"\n2. What is Terraform state and why it matters\n3. Demo: local state, show the terraform.tfstate file\n4. Problem: two engineers run apply at the same time\n5. Solution: remote backend with S3\n6. Demo: configure backend.tf, run terraform init -migrate-state\n7. Add DynamoDB locking, demo the lock conflict\n8. Best practices: state per environment, encryption at rest",
+    "thumbnailIdeas": "Broken lock icon with Terraform logo. Text: \"Your State File Is Not Safe\"",
+    "linkedContent": [],
+    "notes": "Recording done. Need to edit out the section where the AWS credentials expired mid-demo. Re-recorded that part separately.",
+    "learnings": [],
+    "feedback": [],
+    "timestamps": {
+      "created": "2025-02-01T10:00:00.000Z",
+      "technicallyReady": "2025-02-08T11:00:00.000Z",
+      "shootingScriptReady": "2025-02-12T09:00:00.000Z",
+      "readyToRecord": "2025-02-14T10:00:00.000Z",
+      "recorded": "2025-02-20T15:00:00.000Z",
+      "edited": null,
+      "published": null,
+      "shortsExtracted": null,
+      "lifetimeValueEnds": null,
+      "updated": "2025-02-20T15:00:00.000Z"
+    }
+  },
+  {
+    "title": "Building a CLI Tool with Go and Cobra",
+    "description": "Step-by-step guide to building a production-quality CLI tool in Go using Cobra. Cover subcommands, flags, config files with Viper, and cross-compilation.",
+    "tags": ["go", "cli", "cobra", "developer-tools"],
+    "status": "shooting-script-ready",
+    "phase": "pre-production",
+    "order": 0,
+    "contentType": "video",
+    "parentVideoId": null,
+    "script": null,
+    "platformVersions": [],
+    "youtubeUrl": null,
+    "demoItems": [
+      {
+        "id": "demo-3a",
+        "type": "repo",
+        "description": "github.com/example/task-cli — sample task manager CLI built with Cobra",
+        "verified": false
+      },
+      {
+        "id": "demo-3b",
+        "type": "command",
+        "description": "go build with GOOS/GOARCH for cross-compilation to Linux and macOS",
+        "verified": false
+      }
+    ],
+    "talkingPoints": [
+      {
+        "id": "tp-3a",
+        "text": "Cobra is used by kubectl, Hugo, GitHub CLI — it's the industry standard",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 0
+      },
+      {
+        "id": "tp-3b",
+        "text": "Viper + Cobra together give you flags, env vars, and config files for free",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 1
+      }
+    ],
+    "shootingScript": "1. Why Go for CLI tools (single binary, fast startup, cross-compile)\n2. cobra-cli init — scaffold the project\n3. Add a 'task add' subcommand\n4. Add flags: --priority, --due\n5. Wire up Viper for config file (~/.task-cli.yaml)\n6. Add 'task list' with table output\n7. Cross-compile and test on Linux via Docker\n8. Recap: Go + Cobra is the fastest path to a real CLI tool",
+    "thumbnailIdeas": "Terminal screenshot with a polished CLI output. Cobra snake logo in the corner. Text: \"Build CLIs Like a Pro\"",
+    "linkedContent": [],
+    "notes": "Script is ready. Need to finalize the demo repo and verify cross-compilation steps before recording.",
+    "learnings": [],
+    "feedback": [],
+    "timestamps": {
+      "created": "2025-02-20T08:00:00.000Z",
+      "technicallyReady": "2025-02-25T10:00:00.000Z",
+      "shootingScriptReady": "2025-03-01T14:00:00.000Z",
+      "readyToRecord": null,
+      "recorded": null,
+      "edited": null,
+      "published": null,
+      "shortsExtracted": null,
+      "lifetimeValueEnds": null,
+      "updated": "2025-03-01T14:00:00.000Z"
+    }
+  },
+  {
+    "title": "Docker Multi-Stage Builds for Production",
+    "description": "How to use multi-stage builds to create minimal, secure production images. Compare image sizes, layer caching strategies, and security scanning.",
+    "tags": ["docker", "containers", "security", "optimization"],
+    "status": "draft",
+    "phase": "pre-production",
+    "order": 1,
+    "contentType": "video",
+    "parentVideoId": null,
+    "script": null,
+    "platformVersions": [],
+    "youtubeUrl": null,
+    "demoItems": [
+      {
+        "id": "demo-4a",
+        "type": "config-file",
+        "description": "Dockerfile with multi-stage build — builder stage + distroless runtime",
+        "verified": false
+      }
+    ],
+    "talkingPoints": [
+      {
+        "id": "tp-4a",
+        "text": "A typical Node.js image is 1GB+ — multi-stage gets you under 100MB",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 0
+      }
+    ],
+    "shootingScript": null,
+    "thumbnailIdeas": "Before/after image size comparison. Giant container vs tiny container.",
+    "linkedContent": [],
+    "notes": "Idea captured. Research distroless vs Alpine for the comparison section.",
+    "learnings": [],
+    "feedback": [],
+    "timestamps": {
+      "created": "2025-03-05T09:00:00.000Z",
+      "technicallyReady": null,
+      "shootingScriptReady": null,
+      "readyToRecord": null,
+      "recorded": null,
+      "edited": null,
+      "published": null,
+      "shortsExtracted": null,
+      "lifetimeValueEnds": null,
+      "updated": "2025-03-05T09:00:00.000Z"
+    }
+  },
+  {
+    "title": "GitOps with ArgoCD — From Zero to Auto-Deploy",
+    "description": "Set up ArgoCD on a Kubernetes cluster and configure auto-sync from a Git repo. Cover app-of-apps pattern, health checks, and rollback.",
+    "tags": ["gitops", "argocd", "kubernetes", "cicd"],
+    "status": "technically-ready",
+    "phase": "pre-production",
+    "order": 2,
+    "contentType": "video",
+    "parentVideoId": null,
+    "script": null,
+    "platformVersions": [],
+    "youtubeUrl": null,
+    "demoItems": [
+      {
+        "id": "demo-5a",
+        "type": "tool-setup",
+        "description": "ArgoCD installation on kind cluster with port-forwarding to the UI",
+        "verified": true
+      },
+      {
+        "id": "demo-5b",
+        "type": "repo",
+        "description": "gitops-demo repo with Kustomize overlays for dev/staging/prod",
+        "verified": false
+      }
+    ],
+    "talkingPoints": [
+      {
+        "id": "tp-5a",
+        "text": "GitOps means Git is the single source of truth — no more kubectl apply from laptops",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 0
+      },
+      {
+        "id": "tp-5b",
+        "text": "ArgoCD auto-sync + self-heal = your cluster always matches what's in Git",
+        "category": "technical",
+        "priority": "must-say",
+        "order": 1
+      }
+    ],
+    "shootingScript": null,
+    "thumbnailIdeas": "ArgoCD UI screenshot showing a healthy app tree. Git logo with an arrow to a K8s cluster.",
+    "linkedContent": [],
+    "notes": "Technical research done. ArgoCD v2.14 has a new multi-source feature — should I cover that or keep it focused on basics? Basics first, advanced in a follow-up.",
+    "learnings": [],
+    "feedback": [],
+    "timestamps": {
+      "created": "2025-03-08T11:00:00.000Z",
+      "technicallyReady": "2025-03-12T09:00:00.000Z",
+      "shootingScriptReady": null,
+      "readyToRecord": null,
+      "recorded": null,
+      "edited": null,
+      "published": null,
+      "shortsExtracted": null,
+      "lifetimeValueEnds": null,
+      "updated": "2025-03-12T09:00:00.000Z"
+    }
+  }
+]
