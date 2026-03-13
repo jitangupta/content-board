@@ -4,6 +4,8 @@ Personal YouTube content management app for tracking ideas from draft to publica
 
 ![React](https://img.shields.io/badge/React-19-blue) ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue) ![Firebase](https://img.shields.io/badge/Firebase-Firestore%20%2B%20Auth%20%2B%20Hosting-orange) ![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-06B6D4) ![PWA](https://img.shields.io/badge/PWA-installable-brightgreen)
 
+![Content Board dashboard](docs/screenshot.png)
+
 ## Watch the Build Process
 
 This project is part of a video series on building production-grade software with AI:
