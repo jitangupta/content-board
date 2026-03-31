@@ -51,11 +51,15 @@ async function clearCollection(): Promise<number> {
   const snapshot = await db.collection(COLLECTION).get();
   if (snapshot.empty) return 0;
 
-  const batch = db.batch();
-  for (const doc of snapshot.docs) {
-    batch.delete(doc.ref);
+  const BATCH_LIMIT = 500;
+  for (let i = 0; i < snapshot.docs.length; i += BATCH_LIMIT) {
+    const batch = db.batch();
+    const chunk = snapshot.docs.slice(i, i + BATCH_LIMIT);
+    for (const doc of chunk) {
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
   }
-  await batch.commit();
   return snapshot.size;
 }
 

@@ -5,6 +5,10 @@ import { AuthGuard } from '@/features/auth/AuthGuard';
 import { useAuth } from '@/features/auth/useAuth';
 import type { AuthContextValue } from '@/types/auth';
 
+vi.mock('@/services/firebase', () => ({ auth: {}, db: {} }));
+vi.mock('@/services/auth', () => ({
+  isAuthorizedUser: (email: string) => email === 'gtangupta@gmail.com',
+}));
 vi.mock('@/features/auth/useAuth');
 
 function renderWithRouter() {
