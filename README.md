@@ -138,10 +138,10 @@ Load 5 sample content items across different lifecycle stages to see the app in 
    Firebase Console → Project Settings → Service accounts → **Generate new private key**
 2. Save it as `seed/serviceAccountKey.json` (this file is gitignored)
 3. Run the seed script:
-
-```bash
-npx tsx seed/import.ts
-```
+   ```bash
+   npx tsx seed/import.ts             # adds sample data (keeps existing)
+   npx tsx seed/import.ts --override  # replaces all existing data
+   ```
 
 This creates sample videos in Draft, Technically Ready, Shooting Script Ready, Recorded, and Published stages — with demo items, talking points, learnings, and feedback attached.
 
