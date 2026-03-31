@@ -48,15 +48,27 @@ function contentDocRef(contentId: string) {
 // Read operations
 // ---------------------------------------------------------------------------
 
-// Firestore DocumentData is untyped; this function fills defaults for fields added in P8
+// Firestore DocumentData is untyped; this function fills defaults for every field
 // and asserts the result as ContentItem — the single trust boundary for Firestore → app data
 export function normalizeContentItem(raw: Record<string, unknown>): ContentItem {
+  const asString = (v: unknown): string | null =>
+    typeof v === 'string' ? v : null;
+
   return {
     ...raw,
     contentType: raw.contentType ?? 'video',
-    parentVideoId: raw.parentVideoId ?? null,
-    script: raw.script ?? null,
-    platformVersions: raw.platformVersions ?? [],
+    parentVideoId: asString(raw.parentVideoId),
+    script: asString(raw.script),
+    platformVersions: Array.isArray(raw.platformVersions) ? raw.platformVersions : [],
+    youtubeUrl: asString(raw.youtubeUrl),
+    demoItems: Array.isArray(raw.demoItems) ? raw.demoItems : [],
+    talkingPoints: Array.isArray(raw.talkingPoints) ? raw.talkingPoints : [],
+    shootingScript: asString(raw.shootingScript),
+    thumbnailIdeas: asString(raw.thumbnailIdeas),
+    linkedContent: Array.isArray(raw.linkedContent) ? raw.linkedContent : [],
+    notes: asString(raw.notes),
+    learnings: Array.isArray(raw.learnings) ? raw.learnings : [],
+    feedback: Array.isArray(raw.feedback) ? raw.feedback : [],
   } as ContentItem;
 }
 

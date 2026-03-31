@@ -7,7 +7,8 @@
  *   2. Save it as seed/serviceAccountKey.json (gitignored)
  *
  * Usage:
- *   npx tsx seed/import.ts
+ *   npx tsx seed/import.ts              # adds sample data (keeps existing)
+ *   npx tsx seed/import.ts --override   # deletes all existing data first
  */
 
 import { cert, initializeApp } from 'firebase-admin/app';
@@ -44,9 +45,32 @@ interface SampleItem {
   [key: string]: unknown;
 }
 
+const override = process.argv.includes('--override');
+
+async function clearCollection(): Promise<number> {
+  const snapshot = await db.collection(COLLECTION).get();
+  if (snapshot.empty) return 0;
+
+  const BATCH_LIMIT = 500;
+  for (let i = 0; i < snapshot.docs.length; i += BATCH_LIMIT) {
+    const batch = db.batch();
+    const chunk = snapshot.docs.slice(i, i + BATCH_LIMIT);
+    for (const doc of chunk) {
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
+  }
+  return snapshot.size;
+}
+
 async function seed(): Promise<void> {
   const dataPath = resolve(__dirname, 'sample-data.json');
   const items: SampleItem[] = JSON.parse(readFileSync(dataPath, 'utf-8'));
+
+  if (override) {
+    const deleted = await clearCollection();
+    console.log(`Cleared ${deleted} existing documents from "${COLLECTION}".`);
+  }
 
   const batch = db.batch();
 

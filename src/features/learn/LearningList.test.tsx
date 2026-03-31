@@ -6,6 +6,7 @@ import { useContent } from '@/features/content/useContent';
 import { useLearnings } from '@/features/learn/useLearnings';
 import type { ContentItem, Learning } from '@/types/content';
 
+vi.mock('@/services/firebase', () => ({ auth: {}, db: {} }));
 vi.mock('@/features/content/useContent');
 vi.mock('@/features/learn/useLearnings');
 

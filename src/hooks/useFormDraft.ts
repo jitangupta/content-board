@@ -44,8 +44,8 @@ export function useFormDraft({
 
   const isDirty = useMemo(() => {
     return Object.keys(baseline).some((key) => {
-      const current = values[key] ?? '';
-      const base = baseline[key] ?? '';
+      const current = String(values[key] ?? '');
+      const base = String(baseline[key] ?? '');
       if (nullableSet.has(key)) {
         const normalizedCurrent = current.trim() || null;
         const normalizedBase = base.trim() || null;
@@ -64,8 +64,8 @@ export function useFormDraft({
 
     const changes: Record<string, string | null> = {};
     for (const key of Object.keys(baseline)) {
-      const current = values[key] ?? '';
-      const base = baseline[key] ?? '';
+      const current = String(values[key] ?? '');
+      const base = String(baseline[key] ?? '');
 
       if (nullableSet.has(key)) {
         const normalizedCurrent = current.trim() || null;

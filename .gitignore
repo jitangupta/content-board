@@ -12,6 +12,7 @@ dist
 # Firebase
 .firebase
 seed/serviceAccountKey.json
+seed/*-adminsdk-*.json
 
 # Testing
 coverage
